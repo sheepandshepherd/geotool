@@ -1,0 +1,7 @@
+bin/
+.dub/
+*.o
+*.obj
+win/*.res
+dub.selections.json
+dub.userprefs
