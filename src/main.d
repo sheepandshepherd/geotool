@@ -151,7 +151,7 @@ void main(string[] args)
 	glfwWindowHint(GLFW_CLIENT_API,GLFW_OPENGL_API);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_FALSE);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,0);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, 0);
 
 	window = glfwCreateWindow(width, height,"GeoTool",null,null);
