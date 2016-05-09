@@ -685,7 +685,7 @@ static:
 		}
 		import std.conv : text;
 		import main : deltaTime;
-		if(UI.showDebug) UI.debugMessage = "[F] Rendering "~text(meshes.length)~" meshes sorted into "~text(sortedMeshes.length)~" material groups. "~text(cast(uint)(1f/deltaTime))~"FPS";
+		if(UI.showDebug) UI.debugMessage = "[F] Rendering "~text(meshes.length)~" meshes sorted into "~text(sortedMeshes.length)~" material groups. "~text(cast(uint)(1f/deltaTime))~"FPS\0";
 
 		terrainShader.unbind();
 

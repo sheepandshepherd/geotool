@@ -59,6 +59,7 @@ class Biome
 
 	bool defaultBiome = false; // to make checking simpler than string comparison on name
 	string name, path;
+	immutable char* namez;
 	// OpenGL index of each texture for this biome
 	//   for unassigned textures, USE GL ID 0: the render function will shade them with surf color instead of texture
 	// GL_ID[tex_ID] (tex_ID is not the surf type, but the number on the texture file -- corners/etc accounted for)
@@ -142,8 +143,10 @@ class Biome
 
 	private this(string _name, uint[uint] _textures, string[uint] _paths, string folderPath = null)
 	{
+		import std.string;
 		biomes[_name] = this;
 		name = _name;
+		namez = name.toStringz;
 		textures = _textures;
 		paths = _paths;
 		path = folderPath;
@@ -155,6 +158,7 @@ class Biome
 		biomes["default"] = this;
 		defaultBiome = true;
 		name = "default";
+		namez = "default";
 	}
 
 	/// release assets; use instead of gc-based destructor (gc is non-deterministic)

@@ -20,13 +20,14 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 module ui;
 
 import imgui.api;
+import derelict.imgui.imgui;
 import derelict.opengl3.gl3;
 import derelict.glfw3.glfw3;
 import util.linalg;
 
 import std.string : toStringz;
 
-import main: window, width, height, m, mb, showLoadMenu, savePathString, saveINI, pSurfM, pHighI, pHighM, debugLog, versionString;
+import main: window, width, height, m, mb, showLoadMenu, savePathString, saveINI, pSurfM, pHighI, pHighM, debugLog, versionString, iconHandle;
 import main : filePath = path;
 import map, biome;
 import std.conv : text;
@@ -67,8 +68,23 @@ const RGBA transparent = RGBA(0,0,0,0);
 static class UI
 {
 static:
+	GLFWwindow* g_window;
+	double g_Time = 0.0f;
+	bool[3] g_MousePressed;
+	float g_MouseWheel = 0.0f;
+	uint g_FontTexture = 0;
+	int g_ShaderHandle = 0, g_VertHandle = 0, g_FragHandle = 0;
+	int g_AttribLocationTex = 0, g_AttribLocationProjMtx = 0;
+	int g_AttribLocationPosition = 0, g_AttribLocationUV = 0, g_AttribLocationColor = 0;
+	uint g_VboHandle, g_VaoHandle, g_ElementsHandle;
+	ImGuiIO* io;
+
+
+	/++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	UI variables
+	++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++/
 	string mapStatus = "Map status: ";
-	string debugMessage = "";
+	string debugMessage = "\0";
 	bool showDebug = true;
 
 	// Map bar stuff
@@ -78,7 +94,7 @@ static:
 	vec2i pickedCoord = vec2i(-1,-1);
 
 	int menuMode = -1; // for which window is currently open
-	const string[5] menuNames = ["New","Load","Save","Close",null];
+	static immutable string[5] menuNames = ["New\0","Load\0","Save\0","Close\0",null];
 	bool[5] menu = false;
 	bool[5] menuEnabled = [true,true,true,true,false];
 	RGBA[5] menuColors = [grayBG,grayBG,grayBG,transparent,transparent];
@@ -144,8 +160,239 @@ static:
 		return locked?Enabled.no:Enabled.yes;
 	}
 
-
 	static void render()
+	{
+		int w, h;
+		int display_w, display_h;
+		glfwGetWindowSize(g_window, &w, &h);
+		glfwGetFramebufferSize(g_window, &display_w, &display_h);
+
+		newFrame();
+
+
+		/++foreach(k; 0..512)
+		{
+			if(io.KeysDown[k])
+			{
+				igText("Key %d down for %f s; DeltaT = %f",k,io.KeysDownDurationPrev[k], io.DeltaTime);
+			}
+		}+/
+
+
+		igShowTestWindow();
+		/// FPS bar at bottom
+		if(showDebug)
+		{
+			igSetNextWindowPos(ImVec2(200,height-32),ImGuiSetCond_Always);
+			igSetNextWindowSize(ImVec2(width-400,32),ImGuiSetCond_Always);
+			igBegin("FPS",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
+				ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoInputs);
+			igText(debugMessage.ptr);
+			igEnd();
+		}
+
+
+		/// Menu under map
+		/+igSetNextWindowPos(ImVec2(0,260),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,60),ImGuiSetCond_Always);
+		igBegin("Map bar",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
+			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
+		if(!Map.empty)
+		{
+			mapBarLabel = "Size: "~Map.mapSize.toString;
+			//mapBarLabel2 = "Height at "~Map.cameraPos.toString~": "~text(Map.heightAtPos(Map.cameraPos));
+			imguiLabel(mapBarLabel);
+			if(mapBarLabel2 !is null) imguiLabel(mapBarLabel2);
+		}
+		igEnd();+/
+
+		/// Biome bar under map: imguiBeginScrollArea(null,0,height-260-buttonHeight-12,200,12+buttonHeight,&scrollNull,defaultColorScheme);
+		igSetNextWindowPos(ImVec2(0,260),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,height-260),ImGuiSetCond_Always);
+		igBegin("Settings",null,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove/+|ImGuiWindowFlags_NoSavedSettings+/);
+
+		chooseBiome = igCollapsingHeader("Biome",null,true,true);
+		if(chooseBiome)
+		{
+			if(igRadioButtonBool("[Map Colors]",Biome.selected.defaultBiome))
+			{
+				Biome.selected = Biome.biomes["default"];
+			}
+			foreach(string bn, Biome b; Biome.biomes)
+			{
+				if(b.defaultBiome) continue;
+				if(igRadioButtonBool(b.namez,(Biome.selected is b)))
+				{
+					Biome.selected = b;
+				}
+				igSameLine(1f,165f);
+				igPushIdPtr(cast(void*)b); /// add Biome's pointer to the hash to avoid colliding "x" buttons
+				if(igButton("x"))
+				{
+					import main : biomeRemovalQueue;
+					if(Biome.selected is b) Biome.selected = Biome.biomes["default"];
+					biomeRemovalQueue ~= bn;
+					debugLog("Removing biome <",bn,">");
+				}
+				igPopId();
+			}
+			if(igButton(" + Load biome folder "))
+			{
+				import std.path, std.file;
+				// TODO: allow naming the biome
+				string response = dlgOpenFile("Open any image in a biome folder");
+				if(response !is null)
+				{
+					string folderPath = buildNormalizedPath(std.string.strip(std.string.fromStringz(std.string.toStringz(response))));
+					if(exists(folderPath))
+					{
+						if(!isDir(folderPath))
+						{
+							folderPath = dirName(folderPath);
+						}
+						debug std.stdio.writeln(folderPath);
+						// function already handles errors by returning null:
+						Biome nb = Biome.loadFromFile(null, folderPath);
+					}
+				}
+			}
+			igSeparator();
+		}
+		else
+		{
+			
+		}
+		igCheckbox("Hide ceiling",&Map.hideCeiling);
+		igCheckbox("Mark hidden caves",&Map.markHidden);
+		igCheckbox("Mark lava erosion",&Map.markErosion);
+		igSeparator();
+
+		/// Other non-display settings
+		igCheckbox("Autoload map components",&Map.autoLoad);
+		igCheckbox("Overwrite on save",&Map.autoOverwrite);
+
+		igSeparator();
+
+		//////////imguiCollapse("About",versionString,&showAbout);
+		showAbout = igCollapsingHeader("About",null,true,true);
+		if(showAbout)
+		{
+			igIndent();
+			igImage(cast(void*)iconHandle,ImVec2(128,128),ImVec2(0,1),ImVec2(1,0));
+			igUnindent();
+
+			if(igButton("RRU topic"))
+			{
+				openURL("http://www.rockraidersunited.com/topic/6249-geotool/"w);
+			}
+			igSameLine();
+			igText(versionString.ptr);
+			igSeparator();
+			igText("  Program controls:");
+			igText("Drag map(s) into window = load");
+			igText("F = toggle FPS/info bar");
+			igText("F5/P = screenshot");
+			igText("Esc = exit");
+			
+			igSeparator();
+			igText("  Camera controls:");
+			igText("WASD/Click on map = move");
+			igText("Home = reset/center view");
+			igText("Arrow keys = rotate");
+			igText("PGUP/PGDN/+/- = zoom");
+			
+			igSeparator();
+			igText("  Libraries used:");
+
+			if(igButton("Licenses..."))
+			{
+				openURL(".\\LICENSES - dependencies.txt"w);
+			}
+
+
+			if(igSelectable("Derelict bindings"))
+			{
+				openURL("https://github.com/DerelictOrg"w);
+			}
+			if(igSelectable("GLFW"))
+			{
+				openURL("http://www.glfw.org"w);
+			}
+			if(igSelectable("DevIL"))
+			{
+				openURL("http://openil.sourceforge.net"w);
+			}
+			if(igSelectable("cimgui"))
+			{
+				openURL("https://github.com/Extrawurst/cimgui"w);
+				openURL("https://github.com/ocornut/imgui"w);
+			}
+			if(igSelectable("gl3n / glamour"))
+			{
+				openURL("https://github.com/Dav1dde/gl3n"w);
+				openURL("https://github.com/Dav1dde/glamour"w);
+			}
+			
+			
+		}
+		
+		igEnd();
+
+		/// Load/Save/Import menus
+		igSetNextWindowPos(ImVec2(width-200,0),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,32),ImGuiSetCond_Always);
+		igBegin("File menu buttons",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
+			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
+		menu[] = false;
+		menuEnabled[2..4] = Map.tiles !is null;
+		//imguiButtons!(4)(menu[0..4],menuNames[0..4],menuEnabled[0..4]); // load and save
+		foreach(i; 0..4)
+		{
+			if(i > 0) igSameLine();
+			if(igButton(menuNames[i].ptr) && menuEnabled[i])
+			{
+				menu[i] = true;
+			}
+		}
+
+		if(menu[0]) // new
+		{
+			locked = true;
+			newDialogOpen = true;
+		}
+		else if(menu[1]) // load
+		{
+			newDialogOpen = false;
+			string response = dlgOpenFile();
+			if(response !is null)
+			{
+				bool loaded = Map.load([response]);
+				debug std.stdio.writeln("loaded: ",loaded);
+			}
+		}
+		else if(menu[2]) // save
+		{
+			newDialogOpen = false;
+			string response = dlgSaveFile();
+			if(response !is null)
+			{
+				bool saved = Map.save(response);
+				debug std.stdio.writeln("saved: ",saved);
+			}
+		}
+		else if(menu[3]) // close
+		{
+			newDialogOpen = false;
+			Map.close();
+		}
+		
+		igEnd();
+
+		igRender();
+	}
+
+
+	static void renderOld()
 	{
 		// clear depth so UI is always above rendered map
 		glClear(GL_DEPTH_BUFFER_BIT);
@@ -193,47 +440,9 @@ static:
 			mapBarLabel = "Size: "~Map.mapSize.toString;
 			//mapBarLabel2 = "Height at "~Map.cameraPos.toString~": "~text(Map.heightAtPos(Map.cameraPos));
 			imguiLabel(mapBarLabel);
-			if(mapBarLabel2 !is null) imguiLabel(mapBarLabel2);
+			//if(mapBarLabel2 !is null) imguiLabel(mapBarLabel2);
 		}
 		imguiEndScrollArea();
-
-		/// Load/Save/Import menus
-		imguiBeginScrollArea!(false)(null,width-200,height-32,200,32,&scrollNull);
-		menu[] = false;
-		menuEnabled[2..4] = Map.tiles !is null;
-		imguiButtons!(4)(menu[0..4],menuNames[0..4],menuEnabled[0..4]); // load and save
-		if(menu[0]) // new
-		{
-			locked = true;
-			newDialogOpen = true;
-		}
-		else if(menu[1]) // load
-		{
-			newDialogOpen = false;
-			string response = dlgOpenFile();
-			if(response !is null)
-			{
-				bool loaded = Map.load([response]);
-				debug std.stdio.writeln("loaded: ",loaded);
-			}
-		}
-		else if(menu[2]) // save
-		{
-			newDialogOpen = false;
-			string response = dlgSaveFile();
-			if(response !is null)
-			{
-				bool saved = Map.save(response);
-				debug std.stdio.writeln("saved: ",saved);
-			}
-		}
-		else if(menu[3]) // close
-		{
-			newDialogOpen = false;
-			Map.close();
-		}
-
-		imguiEndScrollArea!(false)();
 
 		/// new map dialog in the middle
 		if(newDialogOpen)
@@ -547,172 +756,6 @@ static:
 		defaultColorScheme.button.textDisabled = defaultDisabledColor;
 		/// end sidebar
 
-		/// Biome bar under map
-		imguiBeginScrollArea(null,0,height-260-buttonHeight-12,200,12+buttonHeight,&scrollNull,defaultColorScheme);
-		if(imguiButton!(0f,0.12f,true)(showBiomeBar?"-":"+"))
-		{
-			showBiomeBar = !showBiomeBar;
-		}
-		imguiLabel("       Settings");
-		imguiEndScrollArea();
-
-		if(showBiomeBar)
-		{
-			imguiBeginScrollArea(null,0,0,200,(height-260-12-buttonHeight),&scrollBiome,defaultColorScheme);
-			imguiSeparatorLine();
-			imguiCollapse("Biome:",Biome.selected.name,&chooseBiome);
-			if(chooseBiome)
-			{
-				defaultColorScheme.button.textDisabled = yellow;
-				if(imguiButton!(0.1f,1f)("[Map Colors]",(Biome.selected.defaultBiome)?Enabled.no:Enabled.yes))
-				{
-					Biome.selected = Biome.biomes["default"];
-				}
-				foreach(string bn, Biome b; Biome.biomes)
-				{
-					if(b.defaultBiome) continue;
-					if(imguiButton!(0.1f,0.87f,true)(b.name,(Biome.selected is b)?Enabled.no:Enabled.yes))
-					{
-						Biome.selected = b;
-					}
-					if(imguiButton!(0.88f,1f)("x"))
-					{
-						import main : biomeRemovalQueue;
-						Biome.selected = Biome.biomes["default"];
-						biomeRemovalQueue ~= bn;
-					}
-				}
-				if(imguiButton!(0.1f)(" + Load biome folder"))
-				{
-					import std.path, std.file;
-					// TODO: allow naming the biome
-					string response = dlgOpenFile("Open any image in a biome folder");
-					if(response !is null)
-					{
-						string folderPath = buildNormalizedPath(std.string.strip(std.string.fromStringz(std.string.toStringz(response))));
-						if(exists(folderPath))
-						{
-							if(!isDir(folderPath))
-							{
-								folderPath = dirName(folderPath);
-							}
-							debug std.stdio.writeln(folderPath);
-							// function already handles errors by returning null:
-							Biome nb = Biome.loadFromFile(null, folderPath);
-						}
-					}
-				}
-				defaultColorScheme.button.textDisabled = defaultDisabledColor;
-			}
-			else
-			{
-
-			}
-
-			if(imguiCheck("Hide ceiling",&Map.hideCeiling))
-			{
-				//Map.buildMeshes(); // 6 Aug 2015: no longer necessary, the renderMap function and shaders handle ceiling automatically.
-				//Map.sortMeshes();
-			}
-
-			imguiCheck("Mark hidden caves",&Map.markHidden);
-			imguiCheck("Mark lava erosion",&Map.markErosion);
-
-			/+++++++++if(imguiCheck("Cull terrain outside view",&Map.cull))
-			{
-
-			}+/
-
-			imguiSeparatorLine();
-
-
-			/// Other non-display settings
-			imguiCheck("Auto-load map components",&Map.autoLoad);
-			imguiCheck("Auto-overwrite on save",&Map.autoOverwrite);
-
-			imguiSeparator();
-			imguiCollapse("About",versionString,&showAbout);
-			if(showAbout)
-			{
-				if(imguiButton("RRU topic"))
-				{
-					openURL("http://www.rockraidersunited.com/topic/6249-geotool/"w);
-				}
-				imguiSeparator();
-				imguiLabel("  Program controls:");
-				imguiLabel("Drag map(s) into window = load");
-				imguiLabel("F = toggle FPS/info bar");
-				imguiLabel("F5/P = screenshot");
-				imguiLabel("Esc = exit");
-
-				imguiSeparator();
-				imguiLabel("  Camera controls:");
-				imguiLabel("WASD/Click on map = move");
-				imguiLabel("Home = reset/center view");
-				imguiLabel("Arrow keys = rotate");
-				imguiLabel("PGUP/PGDN/+/- = zoom");
-
-				imguiSeparator();
-				imguiSeparator();
-				imguiLabel("  Libraries used:");
-				imguiLabel("Derelict bindings");
-				if(imguiButton!(0f,0.2f,true)(". . ."))
-				{
-					openURL("https://github.com/DerelictOrg"w);
-				}
-				if(imguiButton!(0.21f,1f)("Boost license"))
-				{
-
-					dlgMsg(boostLicense,"Derelict: Boost license");
-				}
-
-				imguiLabel("GLFW 3");
-				if(imguiButton!(0f,0.2f,true)(". . ."))
-				{
-					openURL("http://www.glfw.org"w);
-				}
-				if(imguiButton!(0.21f,1f)("zlib/libpng license"))
-				{
-					dlgMsg(glfwLicense,"GLFW 3: zlib/libpng license");
-				}
-
-				imguiLabel("DevIL");
-				if(imguiButton!(0f,0.2f,true)(". . ."))
-				{
-					openURL("http://openil.sourceforge.net"w);
-				}
-				if(imguiButton!(0.21f,1f)("LGPL v2.1"))
-				{
-					openURL("http://openil.sourceforge.net/license.php"w);
-				}
-
-				imguiLabel("Dimgui");
-				if(imguiButton!(0f,0.2f,true)(". . ."))
-				{
-					openURL("https://github.com/d-gamedev-team/dimgui"w);
-				}
-				if(imguiButton!(0.21f,1f)("zlib/libpng license"))
-				{
-					dlgMsg(dimguiLicense,"Dimgui: zlib/libpng license");
-				}
-
-				imguiLabel("gl3n / glamour");
-				if(imguiButton!(0f,0.2f,true)(". . ."))
-				{
-					openURL("https://github.com/Dav1dde/gl3n"w);
-					openURL("https://github.com/Dav1dde/glamour"w);
-				}
-				if(imguiButton!(0.21f,1f)("MIT license"))
-				{
-					dlgMsg(mitLicense,"gl3n / glamour: MIT license");
-				}
-
-
-			}
-
-			imguiEndScrollArea();
-		}
-
 		/// Mouse decoration in edit mode
 		if(editMode && Map.tiles !is null && Map.validCoord(vec2ui(pickedCoord)))
 		{
@@ -839,4 +882,319 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.`;
 
+
+
+
+
+
+	extern(C) nothrow void renderDrawLists(ImDrawData* data)
+	{
+		// Setup render state: alpha-blending enabled, no face culling, no depth testing, scissor enabled
+		glEnable(GL_BLEND);
+		glBlendEquation(GL_FUNC_ADD);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_SCISSOR_TEST);
+		glActiveTexture(GL_TEXTURE0);
+		
+		auto io = igGetIO();
+		// Setup orthographic projection matrix
+		const float width = io.DisplaySize.x;
+		const float height = io.DisplaySize.y;
+		const float[4][4] ortho_projection =
+		[
+			[ 2.0f/width,	0.0f,			0.0f,		0.0f ],
+			[ 0.0f,			2.0f/-height,	0.0f,		0.0f ],
+			[ 0.0f,			0.0f,			-1.0f,		0.0f ],
+			[ -1.0f,		1.0f,			0.0f,		1.0f ],
+		];
+		glUseProgram(g_ShaderHandle);
+		glUniform1i(g_AttribLocationTex, 0);
+		glUniformMatrix4fv(g_AttribLocationProjMtx, 1, GL_FALSE, &ortho_projection[0][0]);
+		
+		glBindVertexArray(g_VaoHandle);
+		glBindBuffer(GL_ARRAY_BUFFER, g_VboHandle);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ElementsHandle);
+		
+		foreach (n; 0..data.CmdListsCount)
+		{
+			ImDrawList* cmd_list = data.CmdLists[n];
+			ImDrawIdx* idx_buffer_offset;
+			
+			auto countVertices = ImDrawList_GetVertexBufferSize(cmd_list);
+			auto countIndices = ImDrawList_GetIndexBufferSize(cmd_list);
+			
+			glBufferData(GL_ARRAY_BUFFER, countVertices * ImDrawVert.sizeof, cast(GLvoid*)ImDrawList_GetVertexPtr(cmd_list,0), GL_STREAM_DRAW);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, countIndices * ImDrawIdx.sizeof, cast(GLvoid*)ImDrawList_GetIndexPtr(cmd_list,0), GL_STREAM_DRAW);
+			
+			auto cmdCnt = ImDrawList_GetCmdSize(cmd_list);
+			
+			foreach(i; 0..cmdCnt)
+			{
+				auto pcmd = ImDrawList_GetCmdPtr(cmd_list, i);
+				
+				if (pcmd.UserCallback)
+				{
+					pcmd.UserCallback(cmd_list, pcmd);
+				}
+				else
+				{
+					glBindTexture(GL_TEXTURE_2D, cast(GLuint)pcmd.TextureId);
+					glScissor(cast(int)pcmd.ClipRect.x, cast(int)(height - pcmd.ClipRect.w), cast(int)(pcmd.ClipRect.z - pcmd.ClipRect.x), cast(int)(pcmd.ClipRect.w - pcmd.ClipRect.y));
+					glDrawElements(GL_TRIANGLES, pcmd.ElemCount, GL_UNSIGNED_SHORT, idx_buffer_offset);
+				}
+				
+				idx_buffer_offset += pcmd.ElemCount;
+			}
+		}
+		
+		// Restore modified state
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glDisable(GL_SCISSOR_TEST);
+	}
+	
+	void initialize(GLFWwindow* window, bool install_callbacks)
+	{
+		g_window = window;
+		
+		ImGuiIO* io = igGetIO(); 
+		io.KeyMap[ImGuiKey_Tab] = GLFW_KEY_TAB;				 // Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
+		io.KeyMap[ImGuiKey_LeftArrow] = GLFW_KEY_LEFT;
+		io.KeyMap[ImGuiKey_RightArrow] = GLFW_KEY_RIGHT;
+		io.KeyMap[ImGuiKey_UpArrow] = GLFW_KEY_UP;
+		io.KeyMap[ImGuiKey_DownArrow] = GLFW_KEY_DOWN;
+		io.KeyMap[ImGuiKey_Home] = GLFW_KEY_HOME;
+		io.KeyMap[ImGuiKey_End] = GLFW_KEY_END;
+		io.KeyMap[ImGuiKey_Delete] = GLFW_KEY_DELETE;
+		io.KeyMap[ImGuiKey_Backspace] = GLFW_KEY_BACKSPACE;
+		io.KeyMap[ImGuiKey_Enter] = GLFW_KEY_ENTER;
+		io.KeyMap[ImGuiKey_Escape] = GLFW_KEY_ESCAPE;
+		io.KeyMap[ImGuiKey_A] = GLFW_KEY_A;
+		io.KeyMap[ImGuiKey_C] = GLFW_KEY_C;
+		io.KeyMap[ImGuiKey_V] = GLFW_KEY_V;
+		io.KeyMap[ImGuiKey_X] = GLFW_KEY_X;
+		io.KeyMap[ImGuiKey_Y] = GLFW_KEY_Y;
+		io.KeyMap[ImGuiKey_Z] = GLFW_KEY_Z;
+		
+		io.RenderDrawListsFn = &renderDrawLists;
+		io.SetClipboardTextFn = &setClipboardText;
+		io.GetClipboardTextFn = &getClipboardText;
+		/+#ifdef _MSC_VER
+		io.ImeWindowHandle = glfwGetWin32Window(g_Window);
+	#endif+/
+		
+		if (install_callbacks)
+		{
+			glfwSetMouseButtonCallback(window, &mouseButtonCallback);
+			glfwSetScrollCallback(window, &scrollCallback);
+			glfwSetKeyCallback(window, &keyCallback);
+			glfwSetCharCallback(window, &charCallback);
+		}
+	}
+	
+	void createDeviceObjects()
+	{
+		const GLchar *vertex_shader =
+			"#version 330\n"
+				"uniform mat4 ProjMtx;\n"
+				"in vec2 Position;\n"
+				"in vec2 UV;\n"
+				"in vec4 Color;\n"
+				"out vec2 Frag_UV;\n"
+				"out vec4 Frag_Color;\n"
+				"void main()\n"
+				"{\n"
+				"	Frag_UV = UV;\n"
+				"	Frag_Color = Color;\n"
+				"	gl_Position = ProjMtx * vec4(Position.xy,0,1);\n"
+				"}\n";
+		
+		const GLchar* fragment_shader =
+			"#version 330\n"
+				"uniform sampler2D Texture;\n"
+				"in vec2 Frag_UV;\n"
+				"in vec4 Frag_Color;\n"
+				"out vec4 Out_Color;\n"
+				"void main()\n"
+				"{\n"
+				"	Out_Color = Frag_Color * texture( Texture, Frag_UV.st);\n"
+				"}\n";
+		
+		g_ShaderHandle = glCreateProgram();
+		g_VertHandle = glCreateShader(GL_VERTEX_SHADER);
+		g_FragHandle = glCreateShader(GL_FRAGMENT_SHADER);
+		glShaderSource(g_VertHandle, 1, &vertex_shader, null);
+		glShaderSource(g_FragHandle, 1, &fragment_shader, null);
+		glCompileShader(g_VertHandle);
+		glCompileShader(g_FragHandle);
+		glAttachShader(g_ShaderHandle, g_VertHandle);
+		glAttachShader(g_ShaderHandle, g_FragHandle);
+		glLinkProgram(g_ShaderHandle);
+		
+		g_AttribLocationTex = glGetUniformLocation(g_ShaderHandle, "Texture");
+		g_AttribLocationProjMtx = glGetUniformLocation(g_ShaderHandle, "ProjMtx");
+		g_AttribLocationPosition = glGetAttribLocation(g_ShaderHandle, "Position");
+		g_AttribLocationUV = glGetAttribLocation(g_ShaderHandle, "UV");
+		g_AttribLocationColor = glGetAttribLocation(g_ShaderHandle, "Color");
+		
+		glGenBuffers(1, &g_VboHandle);
+		glGenBuffers(1, &g_ElementsHandle);
+		
+		glGenVertexArrays(1, &g_VaoHandle);
+		glBindVertexArray(g_VaoHandle);
+		glBindBuffer(GL_ARRAY_BUFFER, g_VboHandle);
+		glEnableVertexAttribArray(g_AttribLocationPosition);
+		glEnableVertexAttribArray(g_AttribLocationUV);
+		glEnableVertexAttribArray(g_AttribLocationColor);
+		
+		glVertexAttribPointer(g_AttribLocationPosition, 2, GL_FLOAT, GL_FALSE, ImDrawVert.sizeof, cast(void*)0);
+		glVertexAttribPointer(g_AttribLocationUV, 2, GL_FLOAT, GL_FALSE, ImDrawVert.sizeof, cast(void*)ImDrawVert.uv.offsetof);
+		glVertexAttribPointer(g_AttribLocationColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, ImDrawVert.sizeof, cast(void*)ImDrawVert.col.offsetof);
+		
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		createFontsTexture();
+	}
+	
+	extern(C) nothrow const(char)* getClipboardText()
+	{
+		return glfwGetClipboardString(g_window);
+	}
+	
+	extern(C) nothrow void setClipboardText(const(char)* text)
+	{
+		glfwSetClipboardString(g_window, text);
+	}
+	
+	extern(C) nothrow void mouseButtonCallback(GLFWwindow*, int button, int action, int /*mods*/)
+	{
+		if (action == GLFW_PRESS && button >= 0 && button < 3)
+			g_MousePressed[button] = true;
+	}
+	
+	extern(C) nothrow void scrollCallback(GLFWwindow*, double /*xoffset*/, double yoffset)
+	{
+		g_MouseWheel += cast(float)yoffset; // Use fractional mouse wheel, 1.0 unit 5 lines.
+	}
+	
+	extern(C) nothrow void keyCallback(GLFWwindow*, int key, int, int action, int mods)
+	{
+		auto io = igGetIO();
+		if (action == GLFW_PRESS)
+			io.KeysDown[key] = true;
+		if (action == GLFW_RELEASE)
+			io.KeysDown[key] = false;
+		io.KeyCtrl = (mods & GLFW_MOD_CONTROL) != 0;
+		io.KeyShift = (mods & GLFW_MOD_SHIFT) != 0;
+		io.KeyAlt = (mods & GLFW_MOD_ALT) != 0;
+	}
+	
+	extern(C) nothrow void charCallback(GLFWwindow*, uint c)
+	{
+		if (c > 0 && c < 0x10000)
+		{
+			ImGuiIO_AddInputCharacter(cast(ushort)c);
+		}
+	}
+	
+	void createFontsTexture()
+	{
+		ImGuiIO* io = igGetIO();
+		
+		ubyte* pixels;
+		int width, height;
+		ImFontAtlas_GetTexDataAsRGBA32(io.Fonts,&pixels,&width,&height,null);
+		
+		glGenTextures(1, &g_FontTexture);
+		glBindTexture(GL_TEXTURE_2D, g_FontTexture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+		
+		// Store our identifier
+		ImFontAtlas_SetTexID(io.Fonts, cast(void*)g_FontTexture);
+	}
+	
+	void shutdown()
+	{
+		if (g_VaoHandle) glDeleteVertexArrays(1, &g_VaoHandle);
+		if (g_VboHandle) glDeleteBuffers(1, &g_VboHandle);
+		if (g_ElementsHandle) glDeleteBuffers(1, &g_ElementsHandle);
+		g_VaoHandle = 0;
+		g_VboHandle = 0;
+		g_ElementsHandle = 0;
+		
+		glDetachShader(g_ShaderHandle, g_VertHandle);
+		glDeleteShader(g_VertHandle);
+		g_VertHandle = 0;
+		
+		glDetachShader(g_ShaderHandle, g_FragHandle);
+		glDeleteShader(g_FragHandle);
+		g_FragHandle = 0;
+		
+		glDeleteProgram(g_ShaderHandle);
+		g_ShaderHandle = 0;
+		
+		if (g_FontTexture)
+		{
+			glDeleteTextures(1, &g_FontTexture);
+			ImFontAtlas_SetTexID(igGetIO().Fonts, cast(void*)0);
+			g_FontTexture = 0;
+		}
+		
+		igShutdown();
+	}
+	
+	void newFrame()
+	{
+		if (!g_FontTexture)
+			createDeviceObjects();
+
+		auto io = igGetIO();
+		
+		// Setup display size (every frame to accommodate for window resizing)
+		int w, h;
+		int display_w, display_h;
+		glfwGetWindowSize(g_window, &w, &h);
+		glfwGetFramebufferSize(g_window, &display_w, &display_h);
+		io.DisplaySize = ImVec2(cast(float)display_w, cast(float)display_h);
+		
+		// Setup time step
+		double current_time =  glfwGetTime();
+		io.DeltaTime = g_Time > 0.0 ? cast(float)(current_time - g_Time) : cast(float)(1.0f/60.0f);
+		g_Time = current_time;
+		
+		// Setup inputs
+		// (we already got mouse wheel, keyboard keys & characters from glfw callbacks polled in glfwPollEvents())
+		if (glfwGetWindowAttrib(g_window, GLFW_FOCUSED))
+		{
+			double mouse_x, mouse_y;
+			glfwGetCursorPos(g_window, &mouse_x, &mouse_y);
+			mouse_x *= cast(float)display_w / w;						// Convert mouse coordinates to pixels
+			mouse_y *= cast(float)display_h / h;
+			io.MousePos = ImVec2(mouse_x, mouse_y);   // Mouse position, in pixels (set to -1,-1 if no mouse / on another screen, etc.)
+		}
+		else
+		{
+			io.MousePos = ImVec2(-1,-1);
+		}
+		
+		for (int i = 0; i < 3; i++)
+		{
+			io.MouseDown[i] = g_MousePressed[i] || glfwGetMouseButton(g_window, i) != 0;	// If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+			g_MousePressed[i] = false;
+		}
+		
+		io.MouseWheel = g_MouseWheel;
+		g_MouseWheel = 0.0f;
+
+	// Hide/show hardware mouse cursor
+		glfwSetInputMode(g_window, GLFW_CURSOR, io.MouseDrawCursor ? GLFW_CURSOR_HIDDEN : GLFW_CURSOR_NORMAL);
+
+	igNewFrame();
+	}
 }

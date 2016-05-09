@@ -25,8 +25,10 @@ import std.math, std.random;
 import std.string, std.conv, std.math, std.file, std.path;
 import derelict.util.exception, derelict.util.loader;
 import derelict.opengl3.gl3, derelict.glfw3.glfw3;
+import derelict.imgui.imgui;
 import derelict.devil.il, derelict.devil.ilu, derelict.devil.ilut; // derelict.assimp3.assimp, 
 import util.linalg;
+import util.texture;
 import glamour.shader : Shader;
 import glamour.vbo : Buffer;
 import glamour.vao : VAO;
@@ -46,9 +48,13 @@ import std.c.process : exit;
 
 import map,biome;
 
+/// Data
+static immutable void[] icon = import("geotool.ico");
+uint iconHandle; /// OpenGL handle for the icon
+
 /// Globals
-debug string versionString = "Debug Beta 2";
-else string versionString = "Beta 2";
+debug string versionString = "Debug Beta 2\0";
+else string versionString = "Beta 2\0";
 string path;
 GLFWwindow* window;
 vec2d mouse = vec2d(0.0,0.0);
@@ -84,9 +90,15 @@ long timeMS() @property { return toMS(time); }
 long timePrevMS() @property { return toMS(timePrev); }
 long deltaTimeMS() @property { return toMS(deltaTime); }
 
-bool[GLFW_KEY_LAST+1] keyPressed;
-bool[GLFW_KEY_LAST+1] keyReleased;
-bool[GLFW_KEY_LAST+1] keyHold;
+bool[512] pressedLastFrame = false;
+bool keyPressed(size_t key)
+{
+	return UI.io.KeysDown[key] && !pressedLastFrame[key];
+}
+bool keyHold(size_t key)
+{
+	return UI.io.KeysDown[key];
+}
 
 int width = 1024, height = 768;
 
@@ -124,6 +136,7 @@ void main(string[] args)
 	try{
 		DerelictGL3.load();
 		DerelictGLFW3.load();
+		DerelictImgui.load();
 		///DerelictASSIMP3.load();
 		DerelictIL.load();
 		DerelictILU.load();
@@ -149,10 +162,10 @@ void main(string[] args)
 	}
 	
 	glfwWindowHint(GLFW_CLIENT_API,GLFW_OPENGL_API);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_FALSE);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, 0);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, true);
 
 	window = glfwCreateWindow(width, height,"GeoTool",null,null);
 	
@@ -240,6 +253,9 @@ void main(string[] args)
 
 	Map.generateMapImages();
 
+	/// load icon from internal data
+	iconHandle = imageDataToGLTexture(IL_ICO,icon);
+
 	version(GLSL120) texturedRectShader = new Shader("texturedrect",texturedrectsource120);
 	version(GLSL130) texturedRectShader = new Shader("texturedrect",texturedrectsource130);
 	texturedRectShaderIDs = [texturedRectShader.get_attrib_location("VertexPosition"), texturedRectShader.get_attrib_location("VertexTexCoord"), texturedRectShader.get_uniform_location("uColor"), texturedRectShader.get_uniform_location("Viewport"), texturedRectShader.get_uniform_location("Texture")];
@@ -266,6 +282,7 @@ void main(string[] args)
 
 
 	imguiInit(fontPath);
+
 
 	colorScheme = defaultColorScheme;
 	///colorScheme.button.textHover = colorScheme.button.text; // colorScheme.button.text
@@ -347,21 +364,14 @@ void main(string[] args)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	
-
-	nothrow static void keyPress(int key)
-	{
-		keyPressed[key] = true;
-		keyHold[key] = true;
-	}
-	nothrow static void keyRelease(int key)
-	{
-		keyReleased[key] = true;
-		keyHold[key] = false;
-	}
 
 	extern(C) nothrow static void window_size_callback(GLFWwindow* window, int _width, int _height)
 	{
+		try
+		{
+			debugLog("Resizing window to ",_width,"x",_height);
+		}
+		catch{}
 		width = _width;
 		height = _height;
 
@@ -370,27 +380,13 @@ void main(string[] args)
 		Map.updateMatrix();
 	}
 	glfwSetWindowSizeCallback(window,&window_size_callback);
-	
-	extern(C) nothrow static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-	{
-		if(action==GLFW_PRESS)
-		{
-			keyPress(key);
-		}
-		if(action==GLFW_RELEASE)
-		{
-			keyRelease(key);
-		}
-	}
-	glfwSetKeyCallback(window, &key_callback);
-	keyHold[] = false;
 
-	/// handle scroll
-	extern(C) nothrow static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+	/// handle scroll. TODO: get mouseScroll from ImGuiIO
+	/+extern(C) nothrow static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 	{
 		mouseScroll = -cast(int)yoffset;
 	}
-	glfwSetScrollCallback(window, &scroll_callback);
+	glfwSetScrollCallback(window, &scroll_callback);+/
 
 	/// drag+drop input for loading maps! http://www.glfw.org/docs/3.1/input.html#input_drop
 	extern(C) nothrow static void drop_callback(GLFWwindow* window, int count, const(char*)* paths)
@@ -471,11 +467,22 @@ void main(string[] args)
 		exit(0); // was Application.exit(); from DGui
 	}
 
+	glViewport(0,0,width,height);
+	/// Initialize UI
+	debugLog("Initializing ImGui...");
+	UI.initialize(window, true);
+	scope(exit) UI.shutdown();
+	debugLog("...done.");
+
 	
 	Map.updateMatrix();
 
 	while( !glfwWindowShouldClose(window) )
 	{
+		// Wait(frames only on event) or Poll(full 60fps)
+		glfwPollEvents();
+		UI.io = igGetIO();
+
 		/// handle drag-drop list
 		if(dropQueue !is null && dropQueue.length > 0)
 		{
@@ -575,11 +582,11 @@ void main(string[] args)
 		/// todo: clean up the main loop
 		
 		/// handle controls
-		if(keyPressed[GLFW_KEY_ESC])
+		if(keyPressed(GLFW_KEY_ESC))
 		{
 			glfwSetWindowShouldClose(window, true);
 		}
-		if(keyPressed[GLFW_KEY_F])
+		if(keyPressed(GLFW_KEY_F))
 		{
 			///debugLog("FPS: ",1/deltaTime,"  mouse: ", m.x,"/",mNorm.x, ",", m.y,"/",mNorm.y);
 			UI.showDebug = !UI.showDebug;
@@ -587,19 +594,19 @@ void main(string[] args)
 
 		// camera controls. if any are pressed during frame, reload the matrix.
 		const float shiftMult = 3f, rateAngle = 0.5f, rateRot = 0.25f, rateZoom = 25f, ratePan = 15f;
-		float shiftMod() @property { return (keyHold[GLFW_KEY_LEFT_SHIFT]||keyHold[GLFW_KEY_RIGHT_SHIFT])?shiftMult:1f; }
-		if(keyHold[GLFW_KEY_UP]){Map.cameraAngle = std.algorithm.min(1f,Map.cameraAngle+(shiftMod*deltaTime*rateAngle));matUpdate = true;}
-		else if(keyHold[GLFW_KEY_DOWN]){Map.cameraAngle = std.algorithm.max(0.1f,Map.cameraAngle-(shiftMod*deltaTime*rateAngle));matUpdate = true;}
+		float shiftMod() @property { return (keyHold(GLFW_KEY_LEFT_SHIFT)||keyHold(GLFW_KEY_RIGHT_SHIFT))?shiftMult:1f; }
+		if(keyHold(GLFW_KEY_UP)){Map.cameraAngle = std.algorithm.min(1f,Map.cameraAngle+(shiftMod*deltaTime*rateAngle));matUpdate = true;}
+		else if(keyHold(GLFW_KEY_DOWN)){Map.cameraAngle = std.algorithm.max(0.1f,Map.cameraAngle-(shiftMod*deltaTime*rateAngle));matUpdate = true;}
 
-		if(keyHold[GLFW_KEY_RIGHT]){ Map.cameraRot = Map.normalize(Map.cameraRot+(shiftMod*deltaTime*rateRot),1f);matUpdate = true; }
-		else if(keyHold[GLFW_KEY_LEFT]){ Map.cameraRot = Map.normalize(Map.cameraRot-(shiftMod*deltaTime*rateRot),1f);matUpdate = true; }
+		if(keyHold(GLFW_KEY_RIGHT)){ Map.cameraRot = Map.normalize(Map.cameraRot+(shiftMod*deltaTime*rateRot),1f);matUpdate = true; }
+		else if(keyHold(GLFW_KEY_LEFT)){ Map.cameraRot = Map.normalize(Map.cameraRot-(shiftMod*deltaTime*rateRot),1f);matUpdate = true; }
 		
 		vec2 panVector = vec2(0f,0f);
 		float camRotRadians = Map.cameraRot * std.math.PI * 2f;
-		if(keyHold[GLFW_KEY_W]){ panVector += (vec2(0f,-1f));matUpdate = true; }
-		if(keyHold[GLFW_KEY_S]){ panVector += (vec2(0f,1f));matUpdate = true; }
-		if(keyHold[GLFW_KEY_A]){ panVector += (vec2(-1f,0f));matUpdate = true; }
-		if(keyHold[GLFW_KEY_D]){ panVector += (vec2(1f,0f));matUpdate = true; }
+		if(keyHold(GLFW_KEY_W)){ panVector += (vec2(0f,-1f));matUpdate = true; }
+		if(keyHold(GLFW_KEY_S)){ panVector += (vec2(0f,1f));matUpdate = true; }
+		if(keyHold(GLFW_KEY_A)){ panVector += (vec2(-1f,0f));matUpdate = true; }
+		if(keyHold(GLFW_KEY_D)){ panVector += (vec2(1f,0f));matUpdate = true; }
 		if(matUpdate)
 		{
 			panVector = vec2(panVector.x*cos(camRotRadians) - panVector.y*sin(camRotRadians), panVector.y*cos(camRotRadians) + panVector.x*sin(camRotRadians));
@@ -609,15 +616,15 @@ void main(string[] args)
 		}
 
 
-		if(keyHold[GLFW_KEY_KP_ADD]||keyHold[GLFW_KEY_PAGEUP]){ Map.cameraZoom = std.algorithm.max(1.5f,Map.cameraZoom-(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
-		else if(keyHold[GLFW_KEY_KP_SUBTRACT]||keyHold[GLFW_KEY_PAGEDOWN]){ Map.cameraZoom = std.algorithm.min(25f,Map.cameraZoom+(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
+		if(keyHold(GLFW_KEY_KP_ADD)||keyHold(GLFW_KEY_PAGEUP)){ Map.cameraZoom = std.algorithm.max(1.5f,Map.cameraZoom-(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
+		else if(keyHold(GLFW_KEY_KP_SUBTRACT)||keyHold(GLFW_KEY_PAGEDOWN)){ Map.cameraZoom = std.algorithm.min(25f,Map.cameraZoom+(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
 
 		/// scroll with mousewheel:
 		if(!mouseInUI && mouseScroll != 0){ Map.cameraZoom = std.algorithm.clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f); matUpdate = true; }
 
 
-		if(keyPressed[GLFW_KEY_HOME]){ Map.cameraPos = vec2(Map.w/2f,Map.h/2f); Map.cameraAngle = 0.8f; Map.cameraRot = 0f; Map.cameraZoom = 10f; matUpdate = true; }
-		if(keyPressed[GLFW_KEY_F5] || keyPressed[GLFW_KEY_P])
+		if(keyPressed(GLFW_KEY_HOME)){ Map.cameraPos = vec2(Map.w/2f,Map.h/2f); Map.cameraAngle = 0.8f; Map.cameraRot = 0f; Map.cameraZoom = 10f; matUpdate = true; }
+		if(keyPressed(GLFW_KEY_F5) || keyPressed(GLFW_KEY_P))
 		{
 			uint tempImage = ilGenImage();
 			ilBindImage(tempImage);
@@ -625,7 +632,7 @@ void main(string[] args)
 			ilSaveImage(toStringz(buildPath(path,"screenshot"~getScreenshotNumber().text~".jpg")));
 			ilDeleteImage(tempImage);
 		}
-		if(keyPressed[GLFW_KEY_M])
+		if(keyPressed(GLFW_KEY_M))
 		{
 			// print matrices
 			writeln("MOUSE: ", m.x," /",mNorm.x, "  ,  ", m.y," /",mNorm.y);
@@ -760,79 +767,29 @@ void main(string[] args)
 		} // end else(mouse in viewport and NOT in ui)
 
 		/// render terrain
+		vao.bind();
 		glEnable(GL_DEPTH_TEST);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		if( Map.tiles !is null && Map.sortedMeshes !is null && Map.sortedMeshes.length > 0) //Map.isMeshBuilt)
 		{
-			/+if(Map.cull)
-			{
-				Map.renderCulledMeshes();
-			}
-			else+/{
-				Map.renderMeshes();
-			}
+			Map.renderMeshes();
 		}
 		else
 		{
-			UI.debugMessage = "[F] not rendering"; //; m:"~(Map.meshes?text(Map.meshes.length):"n")~" s:"~(Map.sortedMeshes?text(Map.sortedMeshes.length):"n");
+			UI.debugMessage = "[F] not rendering\0"; //; m:"~(Map.meshes?text(Map.meshes.length):"n")~" s:"~(Map.sortedMeshes?text(Map.sortedMeshes.length):"n");
 		}
 
 		/// render highlighted terrain
-		//glDisable(GL_DEPTH_TEST);
 		if(Map.highlights !is null) Map.renderHighlights();
-		//glEnable(GL_DEPTH_TEST);
-
-		/++glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glLineWidth(1.5f);+/
-		//glEnable(GL_LINE_SMOOTH);
-	
-		/++if(intersects.length != 0)
-		{
-			glDisable(GL_DEPTH_TEST);
-			//intersects[0] = vec4(point.x, point.y, -point.z,1f);
-			//intersects[0] = vec4(dir.x, dir.y, -dir.z, 1f);
-			terrainShader.bind();
-			terrainShader.uniform_matrix4fv("MVP",(Map.VP*mat4.translation(intersects[0].x,intersects[0].y,-intersects[0].z)).matrixFlat);  // *t.M not needed, always identity
-			
-			uint storage = terrainShader.get_attrib_location("vPos");
-			///debug std.stdio.writeln("@vPos = ",storage);
-			glEnableVertexAttribArray(storage);
-			vCubeVerts.bind;
-			glVertexAttribPointer(storage, 3, GL_FLOAT,GL_FALSE,0,null);
-			
-			vCubeUVs.bind;
-			storage = terrainShader.get_attrib_location("vUV");
-			///debug std.stdio.writeln("@vUV = ",storage);
-			glEnableVertexAttribArray(storage);
-			glVertexAttribPointer(storage, 3, GL_FLOAT,GL_FALSE,0,null);
-			
-			vCubeVerts.bind;
-			storage = terrainShader.get_attrib_location("vNorm");
-			///debug std.stdio.writeln("@vNorm = ",storage);
-			glEnableVertexAttribArray(storage);
-			glVertexAttribPointer(storage, 3, GL_FLOAT,GL_FALSE,0,null);
-			
-			/// OBSOLETE //t.tribuffer.bind;
-			///glDrawElements(GL_TRIANGLES,t.tris.length,GL_UNSIGNED_SHORT,null);
-			glDrawArrays(GL_TRIANGLES,0,cubeVerts.length);
-			
-			glDisableVertexAttribArray(storage);
-			storage = terrainShader.get_attrib_location("vPos");
-			glDisableVertexAttribArray(storage);
-			terrainShader.unbind();
-			glEnable(GL_DEPTH_TEST);
-		}+/
-		/+glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);+/
 
 		/// render UI
 		/// 
+		UI.renderOld();
 		UI.render();
 		
 		glfwSwapBuffers(window);
-		keyPressed[] = false;
-		keyReleased[] = false;
-		
-		
+
+
 		timePrev = time;
 		time = glfwGetTime();
 		deltaTime = time-timePrev;
@@ -840,9 +797,12 @@ void main(string[] args)
 		// reset mouse scroll
 		m.z = 0;
 		mouseScroll = 0;
-		
-		// Wait(frames only on event) or Poll(full 60fps)
-		glfwPollEvents();
+
+		// reset keys
+		foreach(k; 0..512)
+		{
+			pressedLastFrame[k] = UI.io.KeysDown[k];
+		}
 	}
 	
 	/+ unloading handled by scope(exit) +/
