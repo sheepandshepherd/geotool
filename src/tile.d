@@ -19,6 +19,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 module tile;
 
+import std.algorithm.iteration, std.range, std.array;
+import std.conv;
+import std.meta;
 import std.typecons : EnumMembers;
 private import imgui.api : RGBA;
 
@@ -41,6 +44,18 @@ enum Type : ubyte
 	slug,
 	//soil,
 }
+
+private template ExtractTypeName(alias Type type)
+{
+	private enum ExtractTypeName = type.stringof;
+}
+
+//pragma(msg, TypeNameT!(Type.ground));
+
+private enum TypeNames = staticMap!(ExtractTypeName, EnumMembers!Type);
+
+static immutable string[] typeNames = iota(0,EnumMembers!Type.length).map!(  ti=>( [TypeNames][ti] )  ).array;
+static immutable string[] typeNamesz = iota(0,EnumMembers!Type.length).map!(  ti=>( [TypeNames][ti]~'\0' )  ).array;
 
 // LRR's map component file types
 enum FileType : ubyte
