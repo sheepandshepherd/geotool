@@ -327,17 +327,17 @@ static:
 	/// Load/Save/Import/Close at the top right
 	void fileMenu()
 	{
+		igPushStyleVarVec(ImGuiStyleVar_WindowPadding,ImVec2(3,6));
 		igSetNextWindowPos(ImVec2(width-200,0),ImGuiSetCond_Always);
 		igSetNextWindowSize(ImVec2(200,32),ImGuiSetCond_Always);
 		igBegin("File menu buttons",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
 			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
 		menu[] = false;
 		menuEnabled[2..4] = Map.tiles !is null;
-		//imguiButtons!(4)(menu[0..4],menuNames[0..4],menuEnabled[0..4]); // load and save
 		foreach(i; 0..4)
 		{
 			if(i > 0) igSameLine();
-			if(igButton(menuNames[i].ptr) && menuEnabled[i])
+			if(igButton(menuNames[i].ptr,ImVec2(41+i,0)) && menuEnabled[i])
 			{
 				menu[i] = true;
 			}
@@ -374,6 +374,7 @@ static:
 			Map.close();
 		}
 		igEnd();
+		igPopStyleVar();
 	}
 
 	/// Pop-up for creating a new map
