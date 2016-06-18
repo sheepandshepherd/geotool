@@ -128,17 +128,6 @@ void main(string[] args)
 {
 	path = thisExePath().dirName();
 
-	version(Windows) string systemroot = std.process.environment.get("systemroot","C:\\WINDOWS");
-	string fontPath;
-	version(none) // removed in Beta 2; no more windows-only fonts
-	{
-	if(std.file.exists(buildPath(systemroot,"Fonts\\segoeui.ttf")))
-		fontPath = buildPath(systemroot,"Fonts\\segoeui.ttf");
-	else
-		fontPath = buildPath(systemroot,"Fonts\\tahoma.ttf");
-	}
-	fontPath = path~"/font.ttf"; //SourceSansPro-Regular
-
 
 	// make the debug log
 	if(std.file.exists(path~"\\log.txt")) std.file.remove(path~"\\log.txt");
