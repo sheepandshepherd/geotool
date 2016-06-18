@@ -307,7 +307,7 @@ static:
 						((Tile.isGround(Map[x+1,y+1].type))?mGround:mWall)
 					]);
 				// COMPARE: straight
-				rot = wallMatch.compare(matchTemplates[0]);
+				rot = wallMatch.compare(matchTemplates[MatchType.straight]);
 				if(rot < 4)
 				{
 					m.M = mat4(rotM[rot]).translate(cast(float)x+0.5f,cast(float)y+0.5f,0);
@@ -324,7 +324,8 @@ static:
 					return;
 				}
 				// COMPARE: corner
-				rot = wallMatch.compare(matchTemplates[1]);
+				import std.algorithm.comparison : min, max;
+				rot = min(wallMatch.compare(matchTemplates[MatchType.corner1]),  wallMatch.compare(matchTemplates[MatchType.corner2]));
 				if(rot < 4)
 				{
 					m.M = mat4(rotM[rot]).translate(cast(float)x+0.5f,cast(float)y+0.5f,0);
@@ -334,7 +335,7 @@ static:
 					return;
 				}
 				// COMPARE: innerCorner
-				rot = wallMatch.compare(matchTemplates[2]);
+				rot = wallMatch.compare(matchTemplates[MatchType.inner]);
 				if(rot < 4)
 				{
 					m.M = mat4(rotM[rot]).translate(cast(float)x+0.5f,cast(float)y+0.5f,0);
@@ -344,7 +345,7 @@ static:
 					return;
 				}
 				// COMPARE: between
-				rot = wallMatch.compare(matchTemplates[3]);
+				rot = wallMatch.compare(matchTemplates[MatchType.between]);
 				if(rot < 4)
 				{
 					m.M = mat4(rotM[rot]).translate(cast(float)x+0.5f,cast(float)y+0.5f,0);
@@ -354,7 +355,7 @@ static:
 					return;
 				}
 				// COMPARE: ceiling
-				rot = wallMatch.compare(matchTemplates[4]);
+				rot = wallMatch.compare(matchTemplates[MatchType.ceiling]);
 				if(rot < 4)
 				{
 					m.M = mat4.translation(cast(float)x+0.5f,cast(float)y+0.5f,0);
@@ -1345,18 +1346,31 @@ static:
 	const ubyte mGround = 0, mWall = 1, mEither = 2;
 	string StoC = "_x*";
 
+	enum MatchType : size_t
+	{
+		straight = 0,
+		inner = 1,
+		between = 2,
+		ceiling = 3,
+		corner1 = 4,
+		corner2 = 5,
+	}
+
 	/// match templates
-	///              0          1          2          3          4
+	///              0          4/5        1          2          3
 	///             straight   corner     inner      between    ceiling
 	///  0  1  2    x  x  x    x  x  *    x  x  x    x  x  _    x  x  x
-	///  3  .  4    x  .  x    x  .  _    x  .  x    x  .  x    x  .  x
-	///  5  6  7    *  _  *    *  _  *    x  x  _    _  x  x    x  x  x
-	static Match[5] matchTemplates = [
+	///  3  .  4    x  .  x    x  .  ~    x  .  x    x  .  x    x  .  x
+	///  5  6  7    *  _  *    *  ~  *    x  x  _    _  x  x    x  x  x
+	///  
+	///  Note on corners: one, but not both, of the ground spaces can be a wall. That's why two separate comparisons are done
+	static Match[6] matchTemplates = [
 		Match([1,1,1,1,1,2,0,2]),
-		Match([1,1,2,1,0,2,0,2]),
 		Match([1,1,1,1,1,1,1,0]),
 		Match([1,1,0,1,1,0,1,1]),
-		Match([1,1,1,1,1,1,1,1]) ];
+		Match([1,1,1,1,1,1,1,1]),
+		Match([1,1,2,1,2,2,0,2]),
+		Match([1,1,2,1,0,2,2,2]), ];
 
 
 	static const float[4] rotF = [0f,std.math.PI/2f,std.math.PI,std.math.PI*1.5f];
