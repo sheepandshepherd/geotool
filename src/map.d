@@ -21,6 +21,7 @@ module map;
 
 import derelict.opengl3.gl3;
 import derelict.devil.il, derelict.devil.ilut, derelict.devil.ilu : iluScale;
+import derelict.imgui.imgui;
 import util.linalg;
 import mesh, biome;
 
@@ -685,7 +686,12 @@ static:
 		}
 		import std.conv : text;
 		import main : deltaTime;
-		if(UI.showDebug) UI.debugMessage = "[F] Rendering "~text(meshes.length)~" meshes sorted into "~text(sortedMeshes.length)~" material groups. "~text(cast(uint)(1f/deltaTime))~"FPS\0";
+		if(UI.showDebug)
+		{
+			UI.debugMessageMeshes = meshes.length;
+			UI.debugMessageSortedMeshes = sortedMeshes.length;
+			UI.debugMessageFPS = 1f/deltaTime;
+		}
 
 		terrainShader.unbind();
 
@@ -866,7 +872,6 @@ static:
 	bool updateSurfMapImage()
 	{
 		import derelict.opengl3.gl3;
-		import imgui.api : RGBA;
 		if(tiles is null) return false;
 		/+auto glErr = glGetError();
 		if(glErr != 0) debugLog("SURF MAP begin: ", glErr);+/
@@ -883,10 +888,10 @@ static:
 			foreach(uint x; 0..w)
 			{
 				// TODO: add custom surf radar color loading from file
-				RGBA sColor = Tile.colors.get(Map[x,oy].type,RGBA(32,32,32));
-				data[4*(x+w*y)] = sColor.r;
-				data[4*(x+w*y)+1] = sColor.g;
-				data[4*(x+w*y)+2] = sColor.b;
+				auto sColor = Tile.colors.get(Map[x,oy].type,ImVec4(0.125f,0.125f,0.125f,1f));
+				data[4*(x+w*y)] = cast(ubyte)(sColor.x * 255f);
+				data[4*(x+w*y)+1] = cast(ubyte)(sColor.y * 255f);
+				data[4*(x+w*y)+2] = cast(ubyte)(sColor.z * 255f);
 				data[4*(x+w*y)+3] = 255;
 			}
 		}
@@ -924,7 +929,6 @@ static:
 
 	bool updateHighMapImage()
 	{
-		import imgui.api : RGBA;
 		if(tiles is null) return false;
 		glBindTexture(GL_TEXTURE_2D, mapImages[1]);
 		// clear the image with transparency:
@@ -1803,7 +1807,7 @@ static:
 	bool mouseOverTile(vec2ui clicked, ubyte mb)
 	{
 		import ui;
-		import imgui.api : MouseButton;
+		import main : MouseButton;
 		import std.algorithm.searching : canFind;
 
 		vec2ui[] updateCoords = [];

@@ -19,51 +19,26 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 module ui;
 
-import imgui.api;
 import derelict.imgui.imgui;
 import derelict.opengl3.gl3;
 import derelict.glfw3.glfw3;
 import util.linalg;
 
 import std.string : toStringz;
+import std.meta;
+debug import std.stdio : writeln;
 
 import main: window, width, height, m, mb, showLoadMenu, savePathString, saveINI, pSurfM, pHighI, pHighM, debugLog, versionString, iconHandle;
 import main : filePath = path;
 import map, biome;
 import std.conv : text;
 import dialog;
+import util.texture;
 
 import std.algorithm.comparison : clamp, min, max;
 
-import std.typecons : EnumMembers;
-import tile : Tile, Type;
-
-public int buttonHeight() @property {import imgui.engine : BUTTON_HEIGHT; return BUTTON_HEIGHT;}
-public void buttonHeight(int bh) @property {import imgui.engine : BUTTON_HEIGHT; BUTTON_HEIGHT=bh;}
-// copy of the defaultColorScheme for use in custom UI types
-public ColorScheme colorScheme;
-public ColorScheme yellowColorScheme;
-public ColorScheme greenColorScheme;
-
-const RGBA white = RGBA(255,255,255);
-const RGBA gray = RGBA(127,127,127);
-const RGBA black = RGBA(0,0,0);
-const RGBA blue = RGBA(0,0,255);
-const RGBA green = RGBA(0,255,0);
-const RGBA red = RGBA(255,0,0);
-const RGBA yellow = RGBA(255,255,0);
-const RGBA orange = RGBA(255,127,0);
-
-// background colors
-const RGBA whiteBG = RGBA(255,255,255,127);
-const RGBA grayBG = RGBA(127,127,127,127);
-const RGBA blackBG = RGBA(0,0,0,127);
-const RGBA blueBG = RGBA(0,0,255,127);
-const RGBA greenBG = RGBA(0,255,0,127);
-const RGBA redBG = RGBA(255,0,0,127);
-const RGBA yellowBG = RGBA(255,255,0,127);
-const RGBA orangeBG = RGBA(255,127,0,127);
-const RGBA transparent = RGBA(0,0,0,0);
+import std.typecons : EnumMembers, Tuple;
+import tile;
 
 static class UI
 {
@@ -83,8 +58,8 @@ static:
 	/++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	UI variables
 	++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++/
-	string mapStatus = "Map status: ";
-	string debugMessage = "\0";
+	size_t debugMessageMeshes, debugMessageSortedMeshes;
+	float debugMessageFPS;
 	bool showDebug = true;
 
 	// Map bar stuff
@@ -97,20 +72,16 @@ static:
 	static immutable string[5] menuNames = ["New\0","Load\0","Save\0","Close\0",null];
 	bool[5] menu = false;
 	bool[5] menuEnabled = [true,true,true,true,false];
-	RGBA[5] menuColors = [grayBG,grayBG,grayBG,transparent,transparent];
 
 	bool newDialogOpen = false; // the New Map dialog
 	int newDialogTerrainScroll = 0;
 	Type newDialogType = Type.solid;
-	float newDialogW = 40;
-	float newDialogH = 40;
-	float newDialogHeight = 8;
+	int newDialogW = 40;
+	int newDialogH = 40;
+	int newDialogHeight = 8;
 
 	int mapMode = 0;
-	bool[] mapTabs = new bool[9];
-	const string[] mapTabNames = ["Terrain", "Height", "dugg", "cror", "path", "erod", "slid","emrg","OL"];
-	bool[] mapTabEnabled = new bool[9];
-	RGBA[9] mapColors = orangeBG;
+	static immutable string[] mapTabNames = ["Terrain\0", "Height\0", "dugg\0", "cror\0", "path\0", "erod\0", "slid\0","emrg\0","OL\0"];
 
 	// surf mode
 	bool surfBlankPickMode = false;
@@ -120,97 +91,112 @@ static:
 
 	// terrain editing settings
 	bool editMode = true;
-	ubyte editBrush = 0; // Brushes -- 0:Square, 1:Circle, 2:Fill
-	float editBrushSize = 1;
-	ubyte editHeightMode = 0; // Height mode -- 0:Set, 1:Decrease, 2:Increase
-	float editSetHeight = 8;
-	///ubyte editSurf = 0; // 0-10 -- index into Map.terrainTypes /// 15 Aug 2015: removed LRR-style maps, replaced with Tile.type below
+	int editBrush = 0; // Brushes -- 0:Square, 1:Circle, 2:Fill
+	int editBrushSize = 1;
+	int editHeightMode = 0; // Height mode -- 0:Set, 1:Decrease, 2:Increase
+	int editSetHeight = 8;
 
 	/// Terrain mode stuff
-	ubyte editTerrainMode = 0; // 0:type, 1:erodeSpeed, 2:hidden
+	int editTerrainMode = 0; // 0:type, 1:erodeSpeed, 2:hidden
 	Type editType = Type.solid;
-	float editErodeSpeed = 0;
+	int editErodeSpeed = 0;
 	bool editHidden = true;
 	
 	// string versions of [0..5] for the UI
-	const string[6] erodeStrings = ["0","1","2","3","4","5"];
-	pure nothrow erodeColor(ubyte erodeSpeed)
+	static immutable string[6] erodeStrings = ["0\0","1\0","2\0","3\0","4\0","5\0"];
+	pure nothrow ImVec4 erodeColor(int erodeSpeed)
 	{
-		if(erodeSpeed==0) return gray;
-		else return RGBA(255,cast(ubyte)(255-(erodeSpeed-1)*(255/4)),0);
+		return (erodeSpeed==0)?ImVec4(0.5f,0.5f,0.5f,0.5f):ImVec4(1, 1f-((erodeSpeed-1f)/4f) ,0,0.9f);
 	}
-	//float newSizeX = 40, newSizeY = 40;
 
 	// biome bar
 	bool showBiomeBar = true;
 	bool chooseBiome = true;
 	bool showAbout = false;
 
-	// scroll stuff
-	int scrollNull = 0; // for the ones that should never be scrolling
-	int scrollUIBar = 0;
-	int scrollSideBar = 0;
-	int scrollBiome = 0;
-
 	bool deletionConfirmation = false;
 
 	bool locked = false; /// all-purpose lock: gray out the UI while pop-up windows and such things are focused
-	Enabled enabled() @property
+
+	/// draw a 2-column grid of terrain image buttons, storing the picked terrain ID in $(D pickedType)
+	/// Returns: true if clicked
+	bool terrainPicker(ref Type pickedType, bool active = true)
 	{
-		return locked?Enabled.no:Enabled.yes;
+		import util.texture;
+
+		bool ret = false;
+
+		foreach(ti, Type t; EnumMembers!Type)
+		{
+			assert(ti == cast(size_t)t);
+			if(ti & 1) igSameLine(102);
+			uint glID;
+			/+if(Biome.selected && !Biome.selected.defaultBiome)+/ glID = Biome.selected.textures.get(Tile.simpleTex[t],0);
+
+			if(glID == 0) glID = blankTexture;
+
+			foreach(style; AliasSeq!(ImGuiCol_Button/++, ImGuiCol_ButtonActive, ImGuiCol_ButtonHovered+/)) igPushStyleColor(style,ImVec4(1,1,0,(active&&pickedType==t)?1:0 ));
+			bool sa = igImageButton(cast(void*)glID, ImVec2(86,86), ImVec2(0, 1), ImVec2(1, 0), 1, Tile.colors.get(t,ImVec4(1,0,0,1)));
+
+			igSameLine((ti&1)?102f:8f);
+			igPushIdInt(cast(int)t);
+			igSetItemAllowOverlap();
+			/// BUG: igImageButton behaves *very* inconsistently when the image is transparent. An overlapping non-image button is necessary to ensure activation.
+			bool sb = igInvisibleButton("terrainPickerButton",ImVec2(86,86));
+			igPopId();
+			if(igIsItemHovered()) igSetTooltip(typeNamesz[ti].ptr);
+			igPopStyleColor(1);
+			
+			if( sa || sb )
+			{
+				ret = true;
+				pickedType = t;
+			}
+		}
+
+		return ret;
 	}
 
-	static void render()
+	/// map
+	void minimap()
 	{
-		int w, h;
-		int display_w, display_h;
-		glfwGetWindowSize(g_window, &w, &h);
-		glfwGetFramebufferSize(g_window, &display_w, &display_h);
-
-		newFrame();
-
-
-		/++foreach(k; 0..512)
-		{
-			if(io.KeysDown[k])
-			{
-				igText("Key %d down for %f s; DeltaT = %f",k,io.KeysDownDurationPrev[k], io.DeltaTime);
-			}
-		}+/
-
-
-		igShowTestWindow();
-		/// FPS bar at bottom
-		if(showDebug)
-		{
-			igSetNextWindowPos(ImVec2(200,height-32),ImGuiSetCond_Always);
-			igSetNextWindowSize(ImVec2(width-400,32),ImGuiSetCond_Always);
-			igBegin("FPS",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
-				ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoInputs);
-			igText(debugMessage.ptr);
-			igEnd();
-		}
-
-
-		/// Menu under map
-		/+igSetNextWindowPos(ImVec2(0,260),ImGuiSetCond_Always);
-		igSetNextWindowSize(ImVec2(200,60),ImGuiSetCond_Always);
-		igBegin("Map bar",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
+		igPushStyleVarVec(ImGuiStyleVar_WindowPadding, ImVec2(2,2));
+		igSetNextWindowPos(ImVec2(0,0),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,220),ImGuiSetCond_Always);
+		igBegin("Minimap",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
 			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
-		if(!Map.empty)
+		
+		if(Map.tiles !is null && Map.mapImages[mapMode] != 0)
 		{
-			mapBarLabel = "Size: "~Map.mapSize.toString;
-			//mapBarLabel2 = "Height at "~Map.cameraPos.toString~": "~text(Map.heightAtPos(Map.cameraPos));
-			imguiLabel(mapBarLabel);
-			if(mapBarLabel2 !is null) imguiLabel(mapBarLabel2);
+			igImage(cast(void*)Map.mapImages[mapMode],ImVec2(200-4,200-4),ImVec2(0,1),ImVec2(1,0));
+
+			auto drawList = igGetWindowDrawList();
+
+			vec2 camPos = vec2(Map.cameraPos.x/Map.w,Map.cameraPos.y/Map.h); // 0..1, square
+			if(Map.w > Map.h) camPos.y =  0.5f+(camPos.y-0.5f)*((cast(float)Map.h)/(cast(float)Map.w-1f));
+			else if(Map.h > Map.w) camPos.x =  0.5f+(camPos.x-0.5f)*((cast(float)Map.w)/(cast(float)Map.h-1f));
+			camPos *= 196;
+			ImDrawList_AddCircleFilled(drawList,ImVec2(camPos.x+2,camPos.y+2),2,uint.max);
+
+			vec2 rotDir = vec2(std.math.cos((Map.cameraRot-0.25f)*2*std.math.PI),std.math.sin((Map.cameraRot-0.25f)*2*std.math.PI));
+			rotDir *= 6f;
+			rotDir += camPos;
+			ImDrawList_AddLine(drawList,ImVec2(camPos.x+2,camPos.y+2),ImVec2(rotDir.x+2,rotDir.y+2),uint.max);
+
+			igText("Map size: %d x %d",Map.w,Map.h);
 		}
-		igEnd();+/
 
-		/// Biome bar under map: imguiBeginScrollArea(null,0,height-260-buttonHeight-12,200,12+buttonHeight,&scrollNull,defaultColorScheme);
-		igSetNextWindowPos(ImVec2(0,260),ImGuiSetCond_Always);
-		igSetNextWindowSize(ImVec2(200,height-260),ImGuiSetCond_Always);
+		igEnd();
+		igPopStyleVar();
+	}
+
+	/// Biome bar under map at bottom left
+	void biomeBar()
+	{
+		igSetNextWindowPos(ImVec2(0,220),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,height-220),ImGuiSetCond_Always);
 		igBegin("Settings",null,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove/+|ImGuiWindowFlags_NoSavedSettings+/);
-
+		
 		chooseBiome = igCollapsingHeader("Biome",null,true,true);
 		if(chooseBiome)
 		{
@@ -266,21 +252,20 @@ static:
 		igCheckbox("Mark hidden caves",&Map.markHidden);
 		igCheckbox("Mark lava erosion",&Map.markErosion);
 		igSeparator();
-
+		
 		/// Other non-display settings
 		igCheckbox("Autoload map components",&Map.autoLoad);
 		igCheckbox("Overwrite on save",&Map.autoOverwrite);
-
+		
 		igSeparator();
 
-		//////////imguiCollapse("About",versionString,&showAbout);
 		showAbout = igCollapsingHeader("About",null,true,true);
 		if(showAbout)
 		{
 			igIndent();
 			igImage(cast(void*)iconHandle,ImVec2(128,128),ImVec2(0,1),ImVec2(1,0));
 			igUnindent();
-
+			
 			if(igButton("RRU topic"))
 			{
 				openURL("http://www.rockraidersunited.com/topic/6249-geotool/"w);
@@ -303,13 +288,13 @@ static:
 			
 			igSeparator();
 			igText("  Libraries used:");
-
+			
 			if(igButton("Licenses..."))
 			{
 				openURL(".\\LICENSES - dependencies.txt"w);
 			}
-
-
+			
+			
 			if(igSelectable("Derelict bindings"))
 			{
 				openURL("https://github.com/DerelictOrg"w);
@@ -337,8 +322,11 @@ static:
 		}
 		
 		igEnd();
+	}
 
-		/// Load/Save/Import menus
+	/// Load/Save/Import/Close at the top right
+	void fileMenu()
+	{
 		igSetNextWindowPos(ImVec2(width-200,0),ImGuiSetCond_Always);
 		igSetNextWindowSize(ImVec2(200,32),ImGuiSetCond_Always);
 		igBegin("File menu buttons",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
@@ -354,7 +342,7 @@ static:
 				menu[i] = true;
 			}
 		}
-
+		
 		if(menu[0]) // new
 		{
 			locked = true;
@@ -385,418 +373,453 @@ static:
 			newDialogOpen = false;
 			Map.close();
 		}
+		igEnd();
+	}
+
+	/// Pop-up for creating a new map
+	void newDialog()
+	{
+		igSetNextWindowPos(ImVec2(200,30),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(width-400,710),ImGuiSetCond_Always);
+		
+		igBegin("Create New Map",null,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|    /+ImGuiWindowFlags_ShowBorders|+/
+			ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+		
+		igBeginChild("New - Terrain type",ImVec2(200,675),true, ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+		igText("Terrain type:");
+		igSeparator();
+		
+		terrainPicker(newDialogType);
+		
+		igEndChild();
+		
+		igSameLine();
+		igBeginGroup();
+		igBeginChild("New - map settings",ImVec2(/++width-400-20+/0,645),false);
+		igText("Map size:");
+		igSliderInt("X - Width",&newDialogW,4,255);
+		igSliderInt("Y - Height",&newDialogH,4,255);
+		igSliderInt("Floor height",&newDialogHeight,0,63);
+		igEndChild();
+		
+		igBeginChild("New - confirmations",ImVec2(width-400-200,25),false,ImGuiWindowFlags_NoTitleBar);
+		
+		/// right-alignment?
+		if(igButton("Cancel"))
+		{
+			newDialogOpen = false;
+			locked = false;
+		}
+		igSameLine();
+		if(igButton("Create"))
+		{
+			newDialogOpen = false;
+			Map.create(cast(ubyte)newDialogW,cast(ubyte)newDialogH,newDialogType,cast(ubyte)newDialogHeight);
+			locked = false;
+		}
+		
+		igEndChild();
+		igEndGroup();
 		
 		igEnd();
+	}
 
-		igRender();
+	void modePicker()
+	{
+		igSetNextWindowPos(ImVec2(width-200,32),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,48),ImGuiSetCond_Always);
+		igBegin("Mode picker buttons",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
+			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
+
+		/// TODO: restore the rest as their functionalities are implemented
+		igColumns(2,"Mode picker columns",false);
+		foreach(mi; 0..2)
+		{
+			if(mi != 0) igNextColumn();
+			if(igSelectable(mapTabNames[mi].ptr, mi == mapMode,0,const ImVec2(0,32)))
+			{
+				mapMode = mi;
+			}
+			if(mi == mapMode)
+			{
+				
+			}
+		}
+		igColumns();
+
+		igEnd();
 	}
 
 
-	static void renderOld()
+
+
+	/// the massive right sidebar for all tools
+	void sideBar()
 	{
-		// clear depth so UI is always above rendered map
-		glClear(GL_DEPTH_BUFFER_BIT);
-		//glEnable(GL_BLEND);
-		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glDisable(GL_DEPTH_TEST);
-		scrollNull = 0;
-		imguiBeginFrame(m.x,m.y,mb,m.z);
-
-		auto defaultDisabledColor = defaultColorScheme.button.textDisabled;
-
-		//imguiDrawRect(width/2,height/2,199,199);
-		if(showDebug)
-		{
-			imguiBeginScrollArea!false(debugMessage,200,0,width-400,32,&scrollNull);
-			imguiEndScrollArea!false();
-		}
-
-		/// map
-		imguiBeginScrollArea!(false)(null,0,height-200,200,200,&scrollNull,defaultColorScheme);
-		//imguiDrawRect(width/2,height/2,199,199);
-		//imguiDrawTexturedRect(width/2,height/2,188,188,Biome.selected.textures.get(5,uint.max));
-		
-		imguiEndScrollArea!(false)();
-
-		if(Map.tiles !is null && Map.mapImages[mapMode] != 0)
-		{
-			imguiDrawTexturedRect(2,height-198,196,196,Map.mapImages[mapMode]);
-			vec2 camPos = vec2(Map.cameraPos.x/Map.w,Map.cameraPos.y/Map.h); // 0..1, square
-			if(Map.w > Map.h) camPos.y =  0.5f+(camPos.y-0.5f)*((cast(float)Map.h)/(cast(float)Map.w-1f))  ;//camPos.y * ((cast(float)Map.h)/(cast(float)Map.w));
-			else if(Map.h > Map.w) camPos.x =  0.5f+(camPos.x-0.5f)*((cast(float)Map.w)/(cast(float)Map.h-1f))  ;//camPos.x * ((cast(float)Map.w)/(cast(float)Map.h));
-			camPos *= 196;
-			imguiDrawRoundedRect(camPos.x,height-camPos.y-4,4,4,1.5f,yellow);
-			vec2 rotDir = vec2(std.math.cos((Map.cameraRot-0.25f)*2*std.math.PI),std.math.sin((Map.cameraRot-0.25f)*2*std.math.PI));
-			rotDir *= 6f;
-			rotDir += camPos;
-			imguiDrawLine(camPos.x+2,height-camPos.y-2,rotDir.x+2,height-rotDir.y-2,1,yellow);
-		}
+		igSetNextWindowPos(ImVec2(width-200,48+32),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,height-48-32),ImGuiSetCond_Always);
+		igBegin("Sidebar",null,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove);
 
 		
-		/// menu thing under map
-		imguiBeginScrollArea(null,0,height-260,200,60,&scrollNull,defaultColorScheme); // 
-		if(!Map.empty)
-		{
-			mapBarLabel = "Size: "~Map.mapSize.toString;
-			//mapBarLabel2 = "Height at "~Map.cameraPos.toString~": "~text(Map.heightAtPos(Map.cameraPos));
-			imguiLabel(mapBarLabel);
-			//if(mapBarLabel2 !is null) imguiLabel(mapBarLabel2);
-		}
-		imguiEndScrollArea();
+		if(mapMode == 0) sideBarSurfTab();/// conditional: surf mode
+		else if(mapMode == 1) sideBarHeightTab(); /// conditional: heightmap mode
+		
+		igEnd();
+	}
 
-		/// new map dialog in the middle
-		if(newDialogOpen)
-		{
-			imguiBeginScrollArea!(false)("Create New Map:",200,height-64-600,width-400,600,null);
-			imguiSeparator(548); // blank background
-			if(imguiButton!(0.7,0.845,true)("Cancel"))
-			{
-				newDialogOpen = false;
-				locked = false;
-			}
-			if(imguiButton!(0.855,1,false)("Create"))
-			{
-				newDialogOpen = false;
-				Map.create(cast(ubyte)newDialogW,cast(ubyte)newDialogH,newDialogType,cast(ubyte)newDialogHeight);
-				locked = false;
-			}
-			imguiEndScrollArea!(false)();
+	/// brush picker
+	void brushPicker()
+	{
+		// brush selector
+		igText("Brush:");
+		igColumns(2,"Brush columns",false);
+		igRadioButton("Square",&editBrush,0);
+		igNextColumn();
+		igRadioButton("Fill",&editBrush,2);
+		igColumns();
+		igSliderInt("Size",&editBrushSize,1,6);
+	}
 
-			imguiBeginScrollArea!true("Terrain type",202,height-64-600+22,200,600-45-4,&newDialogTerrainScroll);
-			uint glID = 0;
-			foreach(Type t; EnumMembers!Type)
+	/// surf tab
+	void sideBarSurfTab()
+	{
+		igPushIdStr("SurfTab");
+		igText("Import:");
+		if(igButton("LRR map..."))
+		{
+			string response = dlgOpenFile();
+			if(response !is null)
 			{
-				glID = Biome.selected.textures.get(Tile.simpleTex[t],0);
-				//imguiButton!(0.25,1,true)(std.conv.text(t),(newDialogType==t)?Enabled.no:Enabled.yes);
-				if(imguiButtonTextured!(0f,0.25f,false,true,true)(std.conv.text("          ",t),glID,(newDialogType==t)?Enabled.no:Enabled.yes,defaultColorScheme,Tile.colors.get(t,RGBA(1,0,0))))
-				{
-					newDialogType = t;
-				}
+				Map.load([response]);
 			}
-			imguiEndScrollArea!true();
-			imguiBeginScrollArea!false(null,404,height-64-600+22,width-400-206,600-45-4,&scrollNull);
-			imguiLabel("Map size:");
-			imguiSlider("X - Width",&newDialogW,4,255,1);
-			imguiSlider("Y - Height",&newDialogH,4,255,1);
-			imguiLabel("Height:");
-			imguiSlider("",&newDialogHeight,0,63,1);
-			imguiEndScrollArea!false();
 		}
-
-		/// sidebar - map mode picker grid
-		imguiBeginScrollArea!(false)(null,width-200,height-48-32,200,48,&scrollNull); // was 48
-		buttonHeight = 32;
-		mapTabEnabled[] = true;
-		foreach(int i; 0..cast(int)mapTabEnabled.length)
+		/+if(imguiButton!(0.5f,1f)("MCM map...",enabled))
 		{
-			if(mapMode == i || locked) mapTabEnabled[i] = false;
-			mapColors[i] = (Map.tiles is null)?redBG:greenBG;
-		}
-		/// TODO: restore the rest as their functionalities are implemented
-		imguiButtons!(2)(mapTabs[0..2],mapTabNames[0..2],mapTabEnabled[0..2]); ///    imguiButtonsBC       ,mapColors[0..2]
-		///imguiButtonsBC!(3)(mapTabs[3..6],mapTabNames[3..6],mapTabEnabled[3..6],mapColors[3..6]);
-		///imguiButtonsBC!(3)(mapTabs[6..9],mapTabNames[6..9],mapTabEnabled[6..9],mapColors[6..9]);
-		foreach(int i; 0..cast(int)mapTabs.length)
+			
+		}+/
+		if(igButton("PS1 map..."))
 		{
-			if(mapTabs[i]) mapMode=i;
+			string response = dlgOpenFile();
+			if(response !is null)
+			{
+				Map.loadPS1TerrainMap(response);
+			}
 		}
 		
-		buttonHeight = 20;
-
-		if(!locked) imguiLines!(2,true)(mapTabEnabled[0..2],0);
-
-		imguiEndScrollArea!(false)();
-
-		/// sidebar
-		imguiBeginScrollArea(null,width-200,0,200,height-48-32,&scrollSideBar);
-
-		imguiSeparatorLine();
-
-
-		if(mapMode == 0) /// conditional: surf mode
+		
+		/// bottom section of bar: editing tools for existing map
+		if(Map.tiles !is null)
 		{
-			imguiLabel!(true)(" Import:");
-			if(imguiButton!(0.5f,1f)("LRR map...",enabled))
+			/// EDIT panel
+			editMode = igCollapsingHeader("Edit terrain",null,true,true);
+			if(editMode)
 			{
-				string response = dlgOpenFile();
-				if(response !is null)
-				{
-					Map.load([response]);
-				}
-			}
-			/+if(imguiButton!(0.5f,1f)("MCM map...",enabled))
-			{
+				brushPicker();
+
+				uint glID = 0;
 				
-			}+/
-			if(imguiButton!(0.5f,1f)("PS1 map...",enabled))
-			{
-				string response = dlgOpenFile();
-				if(response !is null)
+				// Hidden cavern buttons
+				igText("Hidden caverns");
+				glID = Biome.selected.textures.get(70,blankTexture);
+				//(editTerrainMode==2&&editHidden)
+				igPushStyleColor(ImGuiCol_Button,ImVec4(1,1,0,(editTerrainMode==2&&editHidden)?1:0 ));
+				bool setHideA = igImageButton(cast(void*)glID,ImVec2(50,50),ImVec2(0,1),ImVec2(1,0),1,ImVec4(0.5,0.0,0.0,0.9));
+				igSameLine(8f);
+				igSetItemAllowOverlap();
+				bool setHideB = igInvisibleButton("setHideB",ImVec2(50,50));
+				if( setHideA || setHideB )
 				{
-					Map.loadPS1TerrainMap(response);
+					editTerrainMode = 2;
+					editHidden = true;
 				}
-			}
+				if(igIsItemHovered()) igSetTooltip("Hide");
+				igPopStyleColor();
 
-
-			/// bottom section of bar: editing tools for existing map
-			defaultColorScheme.button.textDisabled = yellow;
-			if(Map.tiles !is null)
-			{
-				imguiSeparatorLine();
-
-				/// EDIT panel
-				imguiCollapse("Edit terrain",null,&editMode);
-				if(editMode)
+				glID = Biome.selected.textures.get(0,blankTexture);
+				//(editTerrainMode==2&& !editHidden)
+				igPushStyleColor(ImGuiCol_Button,ImVec4(1,1,0,(editTerrainMode==2&& !editHidden)?1:0 ));
+				igSameLine(66f);
+				bool setShowA = igImageButton(cast(void*)glID,ImVec2(50,50),ImVec2(0,1),ImVec2(1,0),1,ImVec4(0.0,0.5,0,0.9));
+				igSameLine(66f);
+				igSetItemAllowOverlap();
+				bool setShowB = igInvisibleButton("setShowB",ImVec2(50,50));
+				if( setShowA || setShowB )
 				{
-					// brush selector
-					if(imguiButtonTextured!(0f,0.25f,true,true)("square",0,(editBrush==0)?Enabled.no:Enabled.yes))
-					{
-						editBrush = 0;
-					}
-					/++if(imguiButtonTextured!(0.25f,0.5f,true,true)("round",0,(editBrush==1)?Enabled.no:Enabled.yes))
-					{
-						editBrush = 1;
-					}+/
-					if(imguiButtonTextured!(0.5f,0.75f,false,true)("fill",0,(editBrush==2)?Enabled.no:Enabled.yes))
-					{
-						editBrush = 2;
-					}
-					imguiSlider("Brush size",&editBrushSize,1,6,1,(editBrush==2)?Enabled.no:Enabled.yes);
-					uint glID = 0;
-
-					// Hidden cavern buttons
-					glID = Biome.selected.textures.get(70,0);
-					if(imguiButtonTextured!(0.5f,0.74f,true,true)("Hide",glID,(editTerrainMode==2&&editHidden)?Enabled.no:Enabled.yes))
-					{
-						editTerrainMode = 2;
-						editHidden = true;
-					}
-					glID = Biome.selected.textures.get(0,0);
-					if(imguiButtonTextured!(0.75f,0.99f,true,true)("Show",glID,(editTerrainMode==2&& !editHidden)?Enabled.no:Enabled.yes))
-					{
-						editTerrainMode = 2;
-						editHidden = false;
-					}
-					buttonHeight = 50;
-					imguiLabel("Hidden cave:",(editTerrainMode==2)?yellowColorScheme:defaultColorScheme);
-					buttonHeight = 20;
-
-					// erosion button and slider
-					ubyte uErodeSpeed = cast(ubyte)editErodeSpeed;
-					glID = (uErodeSpeed==0)?(Biome.selected.textures.get(0,0)):(Biome.selected.textures.get(Tile.erosionTex[clamp(uErodeSpeed-2,0,3)],0));
-					if(imguiButtonTextured!(0.5f,0.74f,true,true)("Set...",glID,(editTerrainMode==1)?Enabled.no:Enabled.yes,defaultColorScheme,(uErodeSpeed==0)?RGBA(128,128,128):RGBA(255,cast(ubyte)(255-(uErodeSpeed-1)*(255/4)),0)) )
-					{
-						editTerrainMode = 1;
-					}
-					buttonHeight = 50;
-					imguiLabel("Lava erosion:",(editTerrainMode==1)?yellowColorScheme:defaultColorScheme);
-					buttonHeight = 20;
-
-					imguiSlider("Erode speed",&editErodeSpeed,0,5,1);
-
-					imguiLabel("Terrain type:",(editTerrainMode==0)?yellowColorScheme:defaultColorScheme);
-					// Terrain type buttons
-					foreach(Type t; EnumMembers!Type)
-					{
-						glID = Biome.selected.textures.get(Tile.simpleTex[t],0);
-						bool selected = editTerrainMode == 0 && editType == t;
-						if(imguiButtonTextured!(0f,0.25f,false,true,true)(std.conv.text("          ",t),glID,(selected)?Enabled.no:Enabled.yes,defaultColorScheme,Tile.colors.get(t,RGBA(1,0,0))))
-						{
-							editTerrainMode = 0;
-							editType = t;
-						}
-					}
+					editTerrainMode = 2;
+					editHidden = false;
 				}
+				if(igIsItemHovered()) igSetTooltip("Show");
+				igPopStyleColor();
+				
+				// erosion button and slider
+				igText("Lava spread rate");
 
+				glID = (editErodeSpeed==0)?(Biome.selected.textures.get(0,0)):(Biome.selected.textures.get(Tile.erosionTex[clamp(editErodeSpeed-2,0,3)],0));
+				if(glID == 0) glID = blankTexture;
+				igPushStyleColor(ImGuiCol_Button,ImVec4(1,1,0,(editTerrainMode==1)?1:0 ));
+				ImVec4 erosionColor = erodeColor(editErodeSpeed);
+				bool setErodeA = igImageButton(cast(void*)glID,ImVec2(50,50),ImVec2(0,1),ImVec2(1,0),1,erosionColor);
+				igSameLine(8f);
+				igSetItemAllowOverlap();
+				bool setErodeB = igInvisibleButton("setErodeB",ImVec2(50,50));
+				if( setErodeA || setErodeB )
+				{
+					editTerrainMode = 1;
+				}
+				if(igIsItemHovered()) igSetTooltip("Set erosion rate...");
+				igPopStyleColor();
+				
+				igSliderInt("Erode speed",&editErodeSpeed,0,5);
+
+				igText("Terrain type:");
+				igSeparator();
+				if(terrainPicker(editType, editTerrainMode==0)) editTerrainMode = 0;
 			}
-		} /// end surf mode
-		else if(mapMode == 1) /// conditional: heightmap mode
+			
+		}
+		igPopId();
+	} /// end surf mode
+
+	void sideBarHeightTab()
+	{
+		igPushIdStr("HeightTab");
+		igText("Import:");
+		if(igButton("LRR map..."))
 		{
-			imguiLabel!(true)(" Import:");
-			if(imguiButton!(0.5f,1f)("LRR map...",enabled))
+			string response = dlgOpenFile();
+			if(response !is null)
 			{
-				string response = dlgOpenFile();
-				if(response !is null)
-				{
-					Map.load([response]);
-				}
+				Map.load([response]);
 			}
-			if(imguiButton!(0.5f,1f)("Image...",enabled))
+		}
+		if(igButton("Image..."))
+		{
+			import derelict.devil.il;
+			string response = dlgOpenFile();
+			if(response !is null)
 			{
-				import derelict.devil.il;
-				string response = dlgOpenFile();
-				if(response !is null)
+				string imagePath = response;
+				Map.MapComponent mc;
+				
+				
+				
+				uint imageID = ilGenImage();
+				ilBindImage(imageID);
+				ilLoadImage(imagePath.toStringz);
+				uint w, h;
+				scope(exit)
 				{
-					string imagePath = response;
-					Map.MapComponent mc;
-
-
-
-					uint imageID = ilGenImage();
-					ilBindImage(imageID);
-					ilLoadImage(imagePath.toStringz);
-					uint w, h;
-					scope(exit)
-					{
-						ilDeleteImage(imageID);
-					}
+					ilDeleteImage(imageID);
+				}
+				
+				if(ilGetError() == IL_NO_ERROR && (w = ilGetInteger(IL_IMAGE_WIDTH)) > 0 && (h = ilGetInteger(IL_IMAGE_HEIGHT)) > 0)
+				{
+					bool mapExists = !(Map.tiles is null || Map.w == 0 || Map.h == 0);
 					
-					if(ilGetError() == IL_NO_ERROR && (w = ilGetInteger(IL_IMAGE_WIDTH)) > 0 && (h = ilGetInteger(IL_IMAGE_HEIGHT)) > 0)
+					//// error if mismatched sizes.
+					if(mapExists && ((Map.w!=w) || (Map.h!=h)) )
 					{
-						bool mapExists = !(Map.tiles is null || Map.w == 0 || Map.h == 0);
-
-						//// error if mismatched sizes.
-						if(mapExists && ((Map.w!=w) || (Map.h!=h)) )
-						{
-							string mapmsg = "Image "~std.path.baseName(imagePath)~" ("~text(w)~","~text(h)~") doesn't have the correct size ("~text(Map.w)~","~text(Map.h)~").";
-							debugLog(mapmsg);
-							dlgMsg(mapmsg);
-						}
-						else
-						{
-							if(!mapExists) // null map; create new one
-							{
-								Map.create(cast(ubyte)w,cast(ubyte)h);
-							}
-
-							ubyte scale = 4;
-							ubyte[] data = new ubyte[w*h];
-							void* rawData = cast(void*)(new ubyte[w*h]).ptr;
-							ilCopyPixels(0,0,0,w,h,1,IL_LUMINANCE,IL_UNSIGNED_BYTE,rawData);
-							foreach(uint oy; 0..h)
-							{
-								uint y = h - oy - 1;
-								foreach(uint x; 0..w)
-								{
-									data[x+oy*w] = cast(ubyte)((cast(ubyte*)rawData)[x+y*w]/scale);
-								}
-							}
-							// map is valid; select hrcMR, save map, generate image
-							mc = Map.MapComponent.create(cast(ubyte)w,cast(ubyte)h,data);
-
-							foreach(x; 0..w) foreach(y; 0..h)
-							{
-								Map[x,y].height = mc[x,y];
-							}
-
-							savePathString(imagePath,pHighI);
-							
-							// Validate map and rebuild mesh if valid (Map.isMeshBuilt is updated to true or false)
-							Map.buildMeshes();
-							Map.sortMeshes();
-
-							Map.updateHighMapImage();
-						}
+						string mapmsg = "Image "~std.path.baseName(imagePath)~" ("~text(w)~","~text(h)~") doesn't have the correct size ("~text(Map.w)~","~text(Map.h)~").";
+						debugLog(mapmsg);
+						dlgMsg(mapmsg);
 					}
 					else
 					{
-						string mapmsg = "Image "~std.path.baseName(imagePath)~" could not be loaded."; // TODO: display devIL error
-						dlgMsg(mapmsg);
+						if(!mapExists) // null map; create new one
+						{
+							Map.create(cast(ubyte)w,cast(ubyte)h);
+						}
+						
+						ubyte scale = 4;
+						ubyte[] data = new ubyte[w*h];
+						void* rawData = cast(void*)(new ubyte[w*h]).ptr;
+						ilCopyPixels(0,0,0,w,h,1,IL_LUMINANCE,IL_UNSIGNED_BYTE,rawData);
+						foreach(uint oy; 0..h)
+						{
+							uint y = h - oy - 1;
+							foreach(uint x; 0..w)
+							{
+								data[x+oy*w] = cast(ubyte)((cast(ubyte*)rawData)[x+y*w]/scale);
+							}
+						}
+						// map is valid; select hrcMR, save map, generate image
+						mc = Map.MapComponent.create(cast(ubyte)w,cast(ubyte)h,data);
+						
+						foreach(x; 0..w) foreach(y; 0..h)
+						{
+							Map[x,y].height = mc[x,y];
+						}
+						
+						savePathString(imagePath,pHighI);
+						
+						// Validate map and rebuild mesh if valid (Map.isMeshBuilt is updated to true or false)
+						Map.buildMeshes();
+						Map.sortMeshes();
+						
+						Map.updateHighMapImage();
 					}
 				}
-			}
-			/+if(imguiButton!(0.5f,1f)("MCM map...",enabled))
-			{
-				
-			}+/
-			
-			if(Map.tiles !is null)
-			{
-				imguiSeparatorLine();
-				imguiLabel!(true)("Export:");
-				if(imguiButton!(0.5f,1f)("Image...",enabled))
+				else
 				{
-					string response = dlgSaveFile();
-					if(response !is null)
-					{
-						Map.saveHighImage(response);
-					}
-				}
-				imguiSeparator();
-				imguiSeparatorLine();
-				
-				/// EDIT panel
-				imguiCollapse("Edit heightmap",null,&editMode);
-				if(editMode)
-				{
-					// brush selector
-					if(imguiButtonTextured!(0f,0.25f,true,true)("square",0,(editBrush==0)?Enabled.no:Enabled.yes))
-					{
-						editBrush = 0;
-					}
-					/++if(imguiButtonTextured!(0.25f,0.5f,true,true)("round",0,(editBrush==1)?Enabled.no:Enabled.yes))
-					{
-						editBrush = 1;
-					}+/
-					if(imguiButtonTextured!(0.5f,0.75f,false,true)("fill",0,(editBrush==2)?Enabled.no:Enabled.yes))
-					{
-						editBrush = 2;
-					}
-					imguiSlider("Brush size",&editBrushSize,1,6,1,(editBrush==2)?Enabled.no:Enabled.yes);
-
-					// height editing tools
-					if(imguiButtonTextured!(0f,0.25f,true,true)("set",0,(editHeightMode==0)?Enabled.no:Enabled.yes))
-					{
-						editHeightMode = 0;
-					}
-					if(imguiButtonTextured!(0.25f,0.5f,true,true)("--",0,(editHeightMode==1)?Enabled.no:Enabled.yes))
-					{
-						editHeightMode = 1;
-					}
-					if(imguiButtonTextured!(0.5f,0.75f,false,true)("++",0,(editHeightMode==2)?Enabled.no:Enabled.yes))
-					{
-						editHeightMode = 2;
-					}
-					imguiSlider("Height",&editSetHeight,0f,63f,1f,(editHeightMode==0)?Enabled.yes:Enabled.no);
-
+					string mapmsg = "Image "~std.path.baseName(imagePath)~" could not be loaded."; // TODO: display devIL error
+					dlgMsg(mapmsg);
 				}
 			}
 		}
-		imguiEndScrollArea();
-		defaultColorScheme.button.textDisabled = defaultDisabledColor;
-		/// end sidebar
+		/+if(imguiButton!(0.5f,1f)("MCM map...",enabled))
+			{
+				
+			}+/
+		
+		if(Map.tiles !is null)
+		{
+			igSeparator();
+			igText("Export:");
+			if(igButton("Image..."))
+			{
+				string response = dlgSaveFile();
+				if(response !is null)
+				{
+					Map.saveHighImage(response);
+				}
+			}
+
+			igSeparator();
+			
+			/// EDIT panel
+			editMode = igCollapsingHeader("Edit heightmap",null,true,true);
+			if(editMode)
+			{
+				// brush selector
+				brushPicker();
+				
+				// height editing tools
+				igText("Edit mode:");
+				igColumns(3,"Height editing tools columns",false);
+				igRadioButton("Set",&editHeightMode,0);
+				igNextColumn();
+				igRadioButton("--",&editHeightMode,1);
+				igNextColumn();
+				igRadioButton("++",&editHeightMode,2);
+
+				/+if(imguiButtonTextured!(0f,0.25f,true,true)("set",0,(editHeightMode==0)?Enabled.no:Enabled.yes))
+				{
+					editHeightMode = 0;
+				}
+				if(imguiButtonTextured!(0.25f,0.5f,true,true)("--",0,(editHeightMode==1)?Enabled.no:Enabled.yes))
+				{
+					editHeightMode = 1;
+				}
+				if(imguiButtonTextured!(0.5f,0.75f,false,true)("++",0,(editHeightMode==2)?Enabled.no:Enabled.yes))
+				{
+					editHeightMode = 2;
+				}+/
+				igColumns();
+				igSliderInt("Height",&editSetHeight,0,63);
+				
+			}
+		}
+		igPopId();
+	}
+
+	void mouseDecoration()
+	{
+		igPushStyleVarVec(ImGuiStyleVar_WindowPadding, ImVec2(2,2));
+		igPushStyleColor(ImGuiCol_PopupBg,ImVec4(0,0,0,0.333));
+		uint glID = 0;
+		if(mapMode==0) // Terrain
+		{
+			if(editTerrainMode==0) // type
+			{
+				igBeginTooltip();
+				glID = Biome.selected.textures.get(Tile.simpleTex[editType],0);
+				if(glID==0)
+				{
+					glID = blankTexture;
+				}
+				igImage(cast(void*)glID,ImVec2(32,32),ImVec2(0,1),ImVec2(1,0),ImVec4(1,1,1,1),Tile.colors.get(editType,ImVec4(1,0,0,1)));
+
+				igSameLine();
+				glID = Biome.selected.textures.get(0,0);
+				if(glID==0)
+				{
+					glID = blankTexture;
+				}
+				igImage(cast(void*)glID,ImVec2(32,32),ImVec2(0,1),ImVec2(1,0),ImVec4(1,1,1,1),Tile.colors.get(Type.ground,ImVec4(1,0,0,1)));
+				igEndTooltip();
+			}
+			else if(editTerrainMode==1) // erode
+			{
+				igBeginTooltip();
+				glID = (editErodeSpeed==0)?(Biome.selected.textures.get(0,0)):(Biome.selected.textures.get(Tile.erosionTex[clamp(editErodeSpeed-2,0,3)],0));
+				if(glID==0) glID = blankTexture;
+				igImage(cast(void*)glID,ImVec2(32,32),ImVec2(0,1),ImVec2(1,0),ImVec4(1,1,1,1),erodeColor(editErodeSpeed));
+				igSameLine();
+				igText(erodeStrings[clamp(editErodeSpeed,0,5)].ptr);
+				igEndTooltip();
+			}
+			else if(editTerrainMode==2) // hidden caves
+			{
+				igBeginTooltip();
+				glID = Biome.selected.textures.get(editHidden?70:0,0);
+				if(glID==0) glID = blankTexture;
+				igImage(cast(void*)glID,ImVec2(32,32),ImVec2(0,1),ImVec2(1,0),ImVec4(1,1,1,1),ImVec4(editHidden?1:0, editHidden?0:1,0,1));
+				igSameLine();
+				igText(editHidden?"Hide":"Show");
+				igEndTooltip();
+			}
+		}
+		igPopStyleColor();
+		igPopStyleVar();
+	}
+
+	static void render()
+	{
+		int w, h;
+		int display_w, display_h;
+		glfwGetWindowSize(g_window, &w, &h);
+		glfwGetFramebufferSize(g_window, &display_w, &display_h);
+
+		newFrame();
+
+
+		/// FPS bar at bottom
+		if(showDebug && Map.tiles !is null && Map.sortedMeshes !is null && Map.sortedMeshes.length > 0)
+		{
+			igSetNextWindowPos(ImVec2(200,height-32),ImGuiSetCond_Always);
+			igSetNextWindowSize(ImVec2(width-400,32),ImGuiSetCond_Always);
+			igBegin("FPS",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
+				ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoInputs);
+			igText("[F] Rendering %d meshes sorted into %d material groups. %.1f FPS", debugMessageMeshes, debugMessageSortedMeshes, debugMessageFPS);
+			igEnd();
+		}
+
+		minimap();
+
+		biomeBar();
+
+		fileMenu();
+
+		/// new map dialog in the middle +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		if(newDialogOpen)
+		{
+			newDialog();
+		}
+		/// Mode picker +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		modePicker();
+
+		sideBar();
+
 
 		/// Mouse decoration in edit mode
 		if(editMode && Map.tiles !is null && Map.validCoord(vec2ui(pickedCoord)))
 		{
-			uint glID = 0;
-			if(mapMode==0) // Terrain
-			{
-				if(editTerrainMode==0) // type
-				{
-					glID = Biome.selected.textures.get(Tile.simpleTex[editType],0);
-					if(glID==0) imguiDrawRect(m.x+10,m.y-30,32,32,Tile.colors.get(editType,gray));
-					else imguiDrawTexturedRect(m.x+10,m.y-30,32,32,glID,white);
-					glID = Biome.selected.textures.get(0,0);
-					if(glID==0) imguiDrawRect(m.x+42,m.y-30,32,32,Tile.colors.get(Type.ground,gray));
-					else imguiDrawTexturedRect(m.x+42,m.y-30,32,32,glID,white);
-				}
-				else if(editTerrainMode==1) // erode
-				{
-					ubyte uErodeSpeed = cast(ubyte)editErodeSpeed;
-					glID = (uErodeSpeed==0)?(Biome.selected.textures.get(0,0)):(Biome.selected.textures.get(Tile.erosionTex[clamp(uErodeSpeed-2,0,3)],0));
-					if(glID==0) imguiDrawRect(m.x+10,m.y-30,32,32,erodeColor(uErodeSpeed));
-					else imguiDrawTexturedRect(m.x+10,m.y-30,32,32,glID,white);
-					imguiBeginScrollArea!(false)(erodeStrings[clamp(uErodeSpeed,0,5)],m.x+42,m.y-26,32,24,&scrollNull);
-					imguiEndScrollArea!(false)();
-				}
-				else if(editTerrainMode==2) // hidden caves
-				{
-					glID = Biome.selected.textures.get(editHidden?70:0,0);
-					if(glID==0) imguiDrawRect(m.x+10,m.y-30,32,32,editHidden?red:gray);
-					else imguiDrawTexturedRect(m.x+10,m.y-30,32,32,glID,white);
-					imguiBeginScrollArea!(false)(editHidden?"Hide":"Show",m.x+42,m.y-26,58,24,&scrollNull);
-					imguiEndScrollArea!(false)();
-				}
-			}
+			mouseDecoration();
 		}
 
-		imguiEndFrame();
-		imguiRender(width,height);
-		//glDisable(GL_BLEND);
-		glEnable(GL_DEPTH_TEST);
-	}
 
+		igRender();
+	}
 
 
 	private void openURL(wstring url)

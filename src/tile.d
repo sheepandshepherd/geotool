@@ -23,7 +23,7 @@ import std.algorithm.iteration, std.range, std.array;
 import std.conv;
 import std.meta;
 import std.typecons : EnumMembers;
-private import imgui.api : RGBA;
+private import derelict.imgui.imgui : ImVec4;
 
 /// surface and terrain type, all mutually exclusive
 enum Type : ubyte
@@ -78,8 +78,8 @@ struct Tile
 	static uint[Type] groundTex;
 	static uint[Type] simpleTex; // for editor UI
 	static const roofTex = 70;
-	static RGBA[Type] defaultColors;// = [ 0:RGBA(32,32,32), 1:RGBA(82,0,140), 2:RGBA(115,28,173), 3:RGBA(148,60,206), 4:RGBA(173,89,239), 5:RGBA(41,0,74), 6:RGBA(255,89,0), 8:RGBA(156,65,8), 10:RGBA(184,255,0), 11:RGBA(255,255,0) ]; // default colors: will be used as blank texture if not loaded
-	static RGBA[Type] colors;// = defaultColors.dup;
+	static ImVec4[Type] defaultColors;// = [ 0:RGBA(32,32,32), 1:RGBA(82,0,140), 2:RGBA(115,28,173), 3:RGBA(148,60,206), 4:RGBA(173,89,239), 5:RGBA(41,0,74), 6:RGBA(255,89,0), 8:RGBA(156,65,8), 10:RGBA(184,255,0), 11:RGBA(255,255,0) ]; // default colors: will be used as blank texture if not loaded
+	static ImVec4[Type] colors;// = defaultColors.dup;
 	// values for conversion
 	//static immutable ubyte[ubyte] crystalValues;
 	//static immutable ubyte[ubyte] oreValues;

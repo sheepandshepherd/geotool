@@ -41,10 +41,9 @@ import std.process;
 import tile;
 import std.typecons : EnumMembers;
 
-import imgui.api;
 import ui;
 
-import std.c.process : exit;
+import core.stdc.stdlib : exit;
 
 import map,biome;
 
@@ -58,7 +57,7 @@ else string versionString = "Beta 2\0";
 string path;
 GLFWwindow* window;
 vec2d mouse = vec2d(0.0,0.0);
-int mouseScroll = 0;
+float mouseScroll = 0;
 vec3i m = vec3i(0,0,0);
 vec2 mNorm = vec2(0f,0f);
 ubyte mb = 0;
@@ -67,6 +66,13 @@ vec3i mPanAmount = vec3i(0,0,0);
 bool mouseInUI = false;
 Shader terrainShader, texturedRectShader, colorShader;
 uint[5] texturedRectShaderIDs = 0;
+
+enum MouseButton : ubyte
+{
+	left = 1<<1,
+	right = 1<<2,
+	middle = 1<<3,
+}
 
 /// Instructions for main loop
 bool showLoadMenu = true;
@@ -111,6 +117,11 @@ void debugLog(S...)(S ss)
 	}
 	std.file.append(path~"\\log.txt","\n"~logText);
 	std.stdio.writeln(logText);
+}
+
+ImVec4 RGBA(ubyte r, ubyte g, ubyte b, ubyte a = 255)
+{
+	return ImVec4(r/255f, g/255f, b/255f, a/255f);
 }
 
 void main(string[] args)
@@ -264,9 +275,9 @@ void main(string[] args)
 	version(GLSL130) terrainShader = new Shader(buildPath(path,"terrain130.glsl"));
 	terrainShader.bind;
 	float[(EnumMembers!Type).length*3] colors = 0.5f;
-	foreach(Type t, RGBA c; Tile.colors)
+	foreach(Type t, ImVec4 c; Tile.colors)
 	{
-		vec3 color = vec3(c.r, c.g, c.b)*(1f/255f);
+		vec3 color = vec3(c.x, c.y, c.z);
 		colors[t*3..t*3+3] = color.vector[0..3];
 	}
 	terrainShader.uniform3fv("colors",colors);
@@ -280,28 +291,6 @@ void main(string[] args)
 	VAO vao = new VAO();
 	vao.bind();
 
-
-	imguiInit(fontPath);
-
-
-	colorScheme = defaultColorScheme;
-	///colorScheme.button.textHover = colorScheme.button.text; // colorScheme.button.text
-	colorScheme.button.textDisabled = RGBA(0,255,0);
-	colorScheme.scroll.area.back = RGBA(5,6,4,192);
-
-	yellowColorScheme = defaultColorScheme;
-	yellowColorScheme.label.text = yellow;
-	yellowColorScheme.button.textDisabled = yellow;
-	greenColorScheme = defaultColorScheme;
-	greenColorScheme.label.text = green;
-	greenColorScheme.button.textDisabled = green;
-
-	defaultColorScheme.button.textHover = green;
-	defaultColorScheme.button.textDisabled = RGBA(128,128,128,255);
-	defaultColorScheme.scroll.area.back = RGBA(5,6,4,192);
-	defaultColorScheme.checkbox.textHover = green;
-	defaultColorScheme.collapse.textHover = green;
-	
 	// load external stuff
 	/// settings files
 	string[] settingsLines;
@@ -455,8 +444,6 @@ void main(string[] args)
 		}
 
 
-		writeln("Destroying imgui...");
-		imguiDestroy();
 		writeln("Destroying GLFW window...");
 		glfwDestroyWindow(window);
 		writeln("Terminating GLFW...");
@@ -482,6 +469,7 @@ void main(string[] args)
 		// Wait(frames only on event) or Poll(full 60fps)
 		glfwPollEvents();
 		UI.io = igGetIO();
+		mouseScroll = UI.io.MouseWheel;
 
 		/// handle drag-drop list
 		if(dropQueue !is null && dropQueue.length > 0)
@@ -539,16 +527,16 @@ void main(string[] args)
 			mb |= MouseButton.middle;
 		}
 		glfwGetCursorPos(window, &mouse.vector[0], &mouse.vector[1]);
-		m = vec3i(cast(int)mouse.x,height-cast(int)mouse.y,mouseScroll); //// 20 Aug 2015: scroll anywhere; was (m.x < 200 || m.x > width-200)?mouseScroll:0
+		m = vec3i(cast(int)mouse.x,height-cast(int)mouse.y,cast(int)(mouseScroll*5f)); //// 20 Aug 2015: scroll anywhere; was (m.x < 200 || m.x > width-200)?mouseScroll:0
 
 		mNorm = vec2( 2f*cast(float)m.x/cast(float)(width) - 1f, 2f*cast(float)m.y/cast(float)(height) - 1f );
 
 
-		mouseInUI = (m.x < 200 || m.x > width-200 || UI.newDialogOpen);
-
+		//mouseInUI = (m.x < 200 || m.x > width-200 || UI.newDialogOpen);
+		mouseInUI = igIsMouseHoveringAnyWindow() || UI.newDialogOpen;
 
 		/// handle clicking on the map to reposition view
-		if((mb & MouseButton.left) && Map.mapSize != vec2ui(0, 0) && m.x < 200 && m.y > height-200)
+		if((mb&MouseButton.left) && Map.mapSize != vec2ui(0, 0) && m.x < 200 && m.y > height-200)
 		{
 			// First, scale click location to map coordinates
 			//vec4i bounds;
@@ -620,7 +608,7 @@ void main(string[] args)
 		else if(keyHold(GLFW_KEY_KP_SUBTRACT)||keyHold(GLFW_KEY_PAGEDOWN)){ Map.cameraZoom = std.algorithm.min(25f,Map.cameraZoom+(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
 
 		/// scroll with mousewheel:
-		if(!mouseInUI && mouseScroll != 0){ Map.cameraZoom = std.algorithm.clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f); matUpdate = true; }
+		if(!mouseInUI && mouseScroll != 0f){ Map.cameraZoom = std.algorithm.clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f); matUpdate = true; }
 
 
 		if(keyPressed(GLFW_KEY_HOME)){ Map.cameraPos = vec2(Map.w/2f,Map.h/2f); Map.cameraAngle = 0.8f; Map.cameraRot = 0f; Map.cameraZoom = 10f; matUpdate = true; }
@@ -774,17 +762,13 @@ void main(string[] args)
 		{
 			Map.renderMeshes();
 		}
-		else
-		{
-			UI.debugMessage = "[F] not rendering\0"; //; m:"~(Map.meshes?text(Map.meshes.length):"n")~" s:"~(Map.sortedMeshes?text(Map.sortedMeshes.length):"n");
-		}
 
 		/// render highlighted terrain
 		if(Map.highlights !is null) Map.renderHighlights();
 
 		/// render UI
 		/// 
-		UI.renderOld();
+		//UI.renderOld();
 		UI.render();
 		
 		glfwSwapBuffers(window);
