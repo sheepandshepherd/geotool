@@ -58,7 +58,7 @@ string path;
 GLFWwindow* window;
 vec2d mouse = vec2d(0.0,0.0);
 float mouseScroll = 0;
-vec3i m = vec3i(0,0,0);
+vec2i m = vec2i(0,0);
 vec2 mNorm = vec2(0f,0f);
 ubyte mb = 0;
 vec3i mPanPos = vec3i(0,0,0);
@@ -370,13 +370,6 @@ void main(string[] args)
 	}
 	glfwSetWindowSizeCallback(window,&window_size_callback);
 
-	/// handle scroll. TODO: get mouseScroll from ImGuiIO
-	/+extern(C) nothrow static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-	{
-		mouseScroll = -cast(int)yoffset;
-	}
-	glfwSetScrollCallback(window, &scroll_callback);+/
-
 	/// drag+drop input for loading maps! http://www.glfw.org/docs/3.1/input.html#input_drop
 	extern(C) nothrow static void drop_callback(GLFWwindow* window, int count, const(char*)* paths)
 	{
@@ -469,7 +462,6 @@ void main(string[] args)
 		// Wait(frames only on event) or Poll(full 60fps)
 		glfwPollEvents();
 		UI.io = igGetIO();
-		mouseScroll = UI.io.MouseWheel;
 
 		/// handle drag-drop list
 		if(dropQueue !is null && dropQueue.length > 0)
@@ -527,7 +519,7 @@ void main(string[] args)
 			mb |= MouseButton.middle;
 		}
 		glfwGetCursorPos(window, &mouse.vector[0], &mouse.vector[1]);
-		m = vec3i(cast(int)mouse.x,height-cast(int)mouse.y,cast(int)(mouseScroll*5f)); //// 20 Aug 2015: scroll anywhere; was (m.x < 200 || m.x > width-200)?mouseScroll:0
+		m = vec2i(cast(int)mouse.x,height-cast(int)mouse.y);
 
 		mNorm = vec2( 2f*cast(float)m.x/cast(float)(width) - 1f, 2f*cast(float)m.y/cast(float)(height) - 1f );
 
@@ -608,7 +600,11 @@ void main(string[] args)
 		else if(keyHold(GLFW_KEY_KP_SUBTRACT)||keyHold(GLFW_KEY_PAGEDOWN)){ Map.cameraZoom = std.algorithm.min(25f,Map.cameraZoom+(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
 
 		/// scroll with mousewheel:
-		if(!mouseInUI && mouseScroll != 0f){ Map.cameraZoom = std.algorithm.clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f); matUpdate = true; }
+		if(!mouseInUI && (mouseScroll < -float.epsilon || mouseScroll > float.epsilon))
+		{
+			Map.cameraZoom = std.algorithm.clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f);
+			matUpdate = true;
+		}
 
 
 		if(keyPressed(GLFW_KEY_HOME)){ Map.cameraPos = vec2(Map.w/2f,Map.h/2f); Map.cameraAngle = 0.8f; Map.cameraRot = 0f; Map.cameraZoom = 10f; matUpdate = true; }
@@ -777,10 +773,6 @@ void main(string[] args)
 		timePrev = time;
 		time = glfwGetTime();
 		deltaTime = time-timePrev;
-
-		// reset mouse scroll
-		m.z = 0;
-		mouseScroll = 0;
 
 		// reset keys
 		foreach(k; 0..512)

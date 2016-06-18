@@ -28,7 +28,7 @@ import std.string : toStringz;
 import std.meta;
 debug import std.stdio : writeln;
 
-import main: window, width, height, m, mb, showLoadMenu, savePathString, saveINI, pSurfM, pHighI, pHighM, debugLog, versionString, iconHandle;
+import main: window, width, height, m, mb, showLoadMenu, savePathString, saveINI, pSurfM, pHighI, pHighM, debugLog, versionString, iconHandle, mouseScroll;
 import main : filePath = path;
 import map, biome;
 import std.conv : text;
@@ -1266,6 +1266,7 @@ THE SOFTWARE.`;
 		}
 		
 		io.MouseWheel = g_MouseWheel;
+		mouseScroll = -g_MouseWheel;
 		g_MouseWheel = 0.0f;
 
 	// Hide/show hardware mouse cursor
