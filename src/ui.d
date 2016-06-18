@@ -553,7 +553,7 @@ static:
 				igPopStyleColor();
 				
 				// erosion button and slider
-				igText("Lava spread rate");
+				igText("Lava flow path");
 
 				glID = (editErodeSpeed==0)?(Biome.selected.textures.get(0,0)):(Biome.selected.textures.get(Tile.erosionTex[clamp(editErodeSpeed-2,0,3)],0));
 				if(glID == 0) glID = blankTexture;
@@ -567,10 +567,12 @@ static:
 				{
 					editTerrainMode = 1;
 				}
-				if(igIsItemHovered()) igSetTooltip("Set erosion rate...");
+				if(igIsItemHovered()) igSetTooltip("Set lava flow speed...");
 				igPopStyleColor();
-				
-				igSliderInt("Erode speed",&editErodeSpeed,0,5);
+
+				igPushStyleColor(ImGuiCol_SliderGrab,erosionColor);
+				igSliderInt("Speed",&editErodeSpeed,0,5);
+				igPopStyleColor();
 
 				igText("Terrain type:");
 				igSeparator();
