@@ -827,7 +827,7 @@ static:
 	{
 		style.Colors[ImGuiCol_Text]                  = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
 		style.Colors[ImGuiCol_TextDisabled]          = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
-		style.Colors[ImGuiCol_WindowBg]              = ImVec4(0.03f, 0.07f, 0.00f, 0.47f);
+		style.Colors[ImGuiCol_WindowBg]              = ImVec4(0.01f, 0.03f, 0.00f, 0.80f);
 		style.Colors[ImGuiCol_ChildWindowBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 		style.Colors[ImGuiCol_PopupBg]               = ImVec4(0.05f, 0.09f, 0.10f, 0.90f);
 		style.Colors[ImGuiCol_Border]                = ImVec4(0.00f, 0.39f, 0.00f, 0.86f);
