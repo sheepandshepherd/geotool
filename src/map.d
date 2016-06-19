@@ -80,6 +80,17 @@ static class Map
 static:
 	ubyte w=0, h=0;
 	Tile[] tiles;
+
+	pragma(inline, true) size_t index(int x, int y, int width)
+	{ return x+width*y; }
+	pragma(inline, true) size_t index(ubyte[2] c, ubyte width)
+	{ return c[0]+width*c[1]; }
+	pragma(inline, true) ubyte[2] coord(size_t index, ubyte width)
+	{
+		ubyte[2] c = [cast(ubyte)(index%width), cast(ubyte)(index/width)];
+		return c;
+	}
+
 	nothrow Tile* opIndex(uint x, uint y)
 	{
 		if(x >= w || y >= h) return null;
@@ -1416,6 +1427,83 @@ static:
 		updateMatrix();
 
 		return true;
+	}
+
+	/++
+	Returns: a resized copy of the map. Does not affect the current map unless $(D overwrite) is set to true.
+	+/
+	Tile[] resize(int addLeft, int addRight, int addTop, int addBottom, bool overwrite = false)
+	{
+		ubyte nw = cast(ubyte)(w+addLeft+addRight);
+		ubyte nh = cast(ubyte)(h+addTop+addBottom);
+		if(w-(addLeft + addRight) < 2 || h-(addTop + addBottom) < 2) throw new Exception("New map size is degenerate");
+
+		Tile[] newTiles = new Tile[nw*nh];
+		foreach(y; 0..h) /// y is the original map height
+		{
+			auto oy = y+addTop; /// oy is the new map height for this row of the old map
+			if(oy < 0) continue; // negative offset means this row of the map gets chopped off
+			if(oy >= nh) continue; // this row of the map gets chopped off on the bottom side
+			foreach(x; 0..w)
+			{
+				auto ox = x+addLeft; /// ox is the new map x coord for this column of the old map
+				if(ox < 0) continue;
+				if(ox >= nw) continue;
+				newTiles[index(ox,oy,nw)] = tiles[index(x,y,w)];
+			}
+
+			if(addLeft > 0)
+			{
+				foreach(i; 0..addLeft)
+				{
+					newTiles[index(i,oy,nw)] = tiles[index(0,y,w)];
+				}
+			}
+			if(addRight > 0)
+			{
+				foreach(i; 0..addRight)
+				{
+					newTiles[index(i+w+addLeft,oy,nw)] = tiles[index(w-1,y,w)];
+				}
+			}
+		}
+		foreach(x; 0..w)
+		{
+			auto ox = x+addLeft;
+			if(ox < 0) continue; // negative offset means this column of the map gets chopped off
+			if(ox >= nw) continue; // this column of the map gets chopped off on the right side
+			if(addTop > 0)
+			{
+				foreach(i; 0..addTop)
+				{
+					newTiles[index(ox,i,nw)] = tiles[index(x,0,w)];
+				}
+			}
+			if(addBottom > 0)
+			{
+				foreach(i; 0..addBottom)
+				{
+					newTiles[index(ox,i+h+addTop,nw)] = tiles[index(x,h-1,w)];
+				}
+			}
+		}
+
+		/// TODO: corners!
+
+		if(overwrite)
+		{
+			w = cast(ubyte)(w+addLeft+addRight);
+			h = cast(ubyte)(h+addTop+addBottom);
+			tiles.destroy();
+			tiles = newTiles;
+
+			buildMeshes();
+			sortMeshes();
+			updateSurfMapImage();
+			updateHighMapImage();
+		}
+
+		return newTiles;
 	}
 
 	/// SET function -- convert from MapComponents to Tile format
