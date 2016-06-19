@@ -157,6 +157,67 @@ static:
 		return ret;
 	}
 
+	/// main menu bar at top
+	void menuBar()
+	{
+		igSetNextWindowPos(ImVec2(200, 0.0f),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(width-400, 20),ImGuiSetCond_Always);
+		//igPushStyleVarVec(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
+		igPushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+		igPushStyleVarVec(ImGuiStyleVar_WindowMinSize, ImVec2(0,0));
+		igBegin("MainMenuBarDummy",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_MenuBar);
+		if(igBeginMenuBar())
+		{
+			if(igBeginMenu("File"))
+			{
+				if(igMenuItem("New...","")) // new
+				{
+					locked = true;
+					newDialogOpen = true;
+				}
+				if(igMenuItem("Load...","")) // load
+				{
+					newDialogOpen = false;
+					string response = dlgOpenFile();
+					if(response !is null)
+					{
+						bool loaded = Map.load([response]);
+						debug std.stdio.writeln("loaded: ",loaded);
+					}
+				}
+				if(igMenuItem("Save...","",false,Map.tiles !is null)) // save
+				{
+					newDialogOpen = false;
+					string response = dlgSaveFile();
+					if(response !is null)
+					{
+						bool saved = Map.save(response);
+						debug std.stdio.writeln("saved: ",saved);
+					}
+				}
+				if(igMenuItem("Close map","",false,Map.tiles !is null)) // close
+				{
+					newDialogOpen = false;
+					Map.close();
+				}
+				if(igMenuItem("Quit",""))
+				{
+					import derelict.glfw3.glfw3;
+					glfwSetWindowShouldClose(window,1);
+				}
+				igEndMenu();
+			}
+			if(igBeginMenu("Edit",Map.tiles !is null))
+			{
+
+				igEndMenu();
+			}
+			igEndMenuBar();
+		}
+		igEnd();
+		igPopStyleVar(2);
+	}
+
 	/// map
 	void minimap()
 	{
@@ -324,59 +385,6 @@ static:
 		igEnd();
 	}
 
-	/// Load/Save/Import/Close at the top right
-	void fileMenu()
-	{
-		igPushStyleVarVec(ImGuiStyleVar_WindowPadding,ImVec2(3,6));
-		igSetNextWindowPos(ImVec2(width-200,0),ImGuiSetCond_Always);
-		igSetNextWindowSize(ImVec2(200,32),ImGuiSetCond_Always);
-		igBegin("File menu buttons",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
-			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
-		menu[] = false;
-		menuEnabled[2..4] = Map.tiles !is null;
-		foreach(i; 0..4)
-		{
-			if(i > 0) igSameLine();
-			if(igButton(menuNames[i].ptr,ImVec2(41+i,0)) && menuEnabled[i])
-			{
-				menu[i] = true;
-			}
-		}
-		
-		if(menu[0]) // new
-		{
-			locked = true;
-			newDialogOpen = true;
-		}
-		else if(menu[1]) // load
-		{
-			newDialogOpen = false;
-			string response = dlgOpenFile();
-			if(response !is null)
-			{
-				bool loaded = Map.load([response]);
-				debug std.stdio.writeln("loaded: ",loaded);
-			}
-		}
-		else if(menu[2]) // save
-		{
-			newDialogOpen = false;
-			string response = dlgSaveFile();
-			if(response !is null)
-			{
-				bool saved = Map.save(response);
-				debug std.stdio.writeln("saved: ",saved);
-			}
-		}
-		else if(menu[3]) // close
-		{
-			newDialogOpen = false;
-			Map.close();
-		}
-		igEnd();
-		igPopStyleVar();
-	}
-
 	/// Pop-up for creating a new map
 	void newDialog()
 	{
@@ -427,7 +435,7 @@ static:
 
 	void modePicker()
 	{
-		igSetNextWindowPos(ImVec2(width-200,32),ImGuiSetCond_Always);
+		igSetNextWindowPos(ImVec2(width-200,0),ImGuiSetCond_Always);
 		igSetNextWindowSize(ImVec2(200,48),ImGuiSetCond_Always);
 		igBegin("Mode picker buttons",null,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|
 			ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings);
@@ -457,8 +465,8 @@ static:
 	/// the massive right sidebar for all tools
 	void sideBar()
 	{
-		igSetNextWindowPos(ImVec2(width-200,48+32),ImGuiSetCond_Always);
-		igSetNextWindowSize(ImVec2(200,height-48-32),ImGuiSetCond_Always);
+		igSetNextWindowPos(ImVec2(width-200,48),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(200,height-48),ImGuiSetCond_Always);
 		igBegin("Sidebar",null,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove);
 
 		
@@ -785,6 +793,8 @@ static:
 
 		newFrame();
 
+		menuBar();
+
 		/// FPS bar at bottom
 		if(showDebug && Map.tiles !is null && Map.sortedMeshes !is null && Map.sortedMeshes.length > 0)
 		{
@@ -799,8 +809,6 @@ static:
 		minimap();
 
 		biomeBar();
-
-		fileMenu();
 
 		/// new map dialog in the middle +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 		if(newDialogOpen)
