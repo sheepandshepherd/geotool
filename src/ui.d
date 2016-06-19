@@ -80,6 +80,8 @@ static:
 	int newDialogH = 40;
 	int newDialogHeight = 8;
 
+	bool resizeDialogOpen = false;
+
 	int mapMode = 0;
 	static immutable string[] mapTabNames = ["Terrain\0", "Height\0", "dugg\0", "cror\0", "path\0", "erod\0", "slid\0","emrg\0","OL\0"];
 
@@ -173,11 +175,11 @@ static:
 				if(igMenuItem("New...","")) // new
 				{
 					locked = true;
-					newDialogOpen = true;
+					setDialogPopup(&newDialogOpen);
 				}
 				if(igMenuItem("Load...","")) // load
 				{
-					newDialogOpen = false;
+					setDialogPopup(null);
 					string response = dlgOpenFile();
 					if(response !is null)
 					{
@@ -187,7 +189,7 @@ static:
 				}
 				if(igMenuItem("Save...","",false,Map.tiles !is null)) // save
 				{
-					newDialogOpen = false;
+					setDialogPopup(null);
 					string response = dlgSaveFile();
 					if(response !is null)
 					{
@@ -197,7 +199,7 @@ static:
 				}
 				if(igMenuItem("Close map","",false,Map.tiles !is null)) // close
 				{
-					newDialogOpen = false;
+					setDialogPopup(null);
 					Map.close();
 				}
 				if(igMenuItem("Quit",""))
@@ -209,7 +211,10 @@ static:
 			}
 			if(igBeginMenu("Edit",Map.tiles !is null))
 			{
-
+				if(igMenuItem("Resize",""))
+				{
+					setDialogPopup(&resizeDialogOpen);
+				}
 				igEndMenu();
 			}
 			igEndMenuBar();
@@ -385,6 +390,21 @@ static:
 		igEnd();
 	}
 
+	/++
+	Set one of the popup dialogs active and ensure all the rest are hidden.
+	
+	Params:
+		activeDialog = pointer to the bool for the dialog that should be opened,
+			or $(D null) to close all
+	+/
+	private void setDialogPopup(bool* activeDialog)
+	{
+		foreach(ref pb; AliasSeq!(newDialogOpen, resizeDialogOpen))
+		{
+			pb = (&pb is activeDialog);
+		}
+	}
+
 	/// Pop-up for creating a new map
 	void newDialog()
 	{
@@ -430,6 +450,19 @@ static:
 		igEndChild();
 		igEndGroup();
 		
+		igEnd();
+	}
+
+	void resizeDialog()
+	{
+		igSetNextWindowPos(ImVec2(200,30),ImGuiSetCond_Always);
+		igSetNextWindowSize(ImVec2(width-400,710),ImGuiSetCond_Always);
+
+		igBegin("Resize Map",&resizeDialogOpen,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoCollapse|
+			ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+
+		igText("Test of resize popup");
+
 		igEnd();
 	}
 
@@ -815,6 +848,9 @@ static:
 		{
 			newDialog();
 		}
+
+		if(resizeDialogOpen) resizeDialog();
+
 		/// Mode picker +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 		modePicker();
 
