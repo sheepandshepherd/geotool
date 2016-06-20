@@ -81,6 +81,10 @@ static:
 	int newDialogHeight = 8;
 
 	bool resizeDialogOpen = false;
+	int resizeDialogAddLeft = 0;
+	int resizeDialogAddRight = 0;
+	int resizeDialogAddTop = 0;
+	int resizeDialogAddBottom = 0;
 
 	int mapMode = 0;
 	static immutable string[] mapTabNames = ["Terrain\0", "Height\0", "dugg\0", "cror\0", "path\0", "erod\0", "slid\0","emrg\0","OL\0"];
@@ -213,6 +217,7 @@ static:
 			{
 				if(igMenuItem("Resize",""))
 				{
+					foreach(v; AliasSeq!(resizeDialogAddLeft, resizeDialogAddRight, resizeDialogAddTop, resizeDialogAddBottom)) v = 0;
 					setDialogPopup(&resizeDialogOpen);
 				}
 				igEndMenu();
@@ -461,7 +466,78 @@ static:
 		igBegin("Resize Map",&resizeDialogOpen,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoCollapse|
 			ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
 
-		igText("Test of resize popup");
+		igBeginChild("Resize - map",ImVec2(400,400),true, ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+		igText("Map:");
+		/// TODO: map
+		/// TODO: click+drag on map should move the existing region around in the new region
+		igEndChild();
+
+		igBeginGroup();
+		igBeginChild("Resize - map settings",ImVec2(0,200),false);
+
+
+		int resizeDialogW = Map.w + resizeDialogAddLeft + resizeDialogAddRight;
+		int resizeDialogH = Map.h + resizeDialogAddBottom + resizeDialogAddTop;
+		int resizeDialogX = -resizeDialogAddLeft;
+		int resizeDialogY = -resizeDialogAddTop;
+
+		bool absolutesChanged = false;
+
+		if(igSliderInt("New width",&resizeDialogW,4,255)) absolutesChanged = true;
+		if(igSliderInt("New height",&resizeDialogH,4,255)) absolutesChanged = true;
+		if(igDragInt("X Offset",&resizeDialogX,1,-255,255,"%.0f")) absolutesChanged = true;
+		if(igDragInt("Y Offset",&resizeDialogY,1,-255,255,"%.0f")) absolutesChanged = true;
+
+		if(absolutesChanged) // update the relative controls from the absolute controls
+		{
+			resizeDialogAddLeft = -resizeDialogX;
+			resizeDialogAddTop = -resizeDialogY;
+			resizeDialogAddRight = resizeDialogW - Map.w - resizeDialogAddLeft;
+			resizeDialogAddBottom = resizeDialogH - Map.h - resizeDialogAddTop;
+		}
+
+		igSeparator();
+
+		bool relativesChanged = false;
+
+		enum names = AliasSeq!("Add Left", "Add Right", "Add Top", "Add Bottom");
+		foreach(vi, ref v; AliasSeq!(resizeDialogAddLeft, resizeDialogAddRight, resizeDialogAddTop, resizeDialogAddBottom))
+		{
+			if(igDragInt(names[vi],&v,1,-255,255,"%.0f")) relativesChanged = true;
+		}
+
+		if(relativesChanged) // re-updated the absolute controls (not strictly necessary since they'll update next frame)
+		{
+			resizeDialogW = Map.w + resizeDialogAddLeft + resizeDialogAddRight;
+			resizeDialogH = Map.h + resizeDialogAddBottom + resizeDialogAddTop;
+			resizeDialogX = -resizeDialogAddLeft;
+			resizeDialogY = -resizeDialogAddTop;
+		}
+
+		igEndChild();
+
+		if(relativesChanged || absolutesChanged)
+		{
+			/// TODO: update the map texture
+		}
+		
+		igBeginChild("Resize - confirmations",ImVec2(width-400-200,25),false,ImGuiWindowFlags_NoTitleBar);
+		
+		/// right-alignment?
+		if(igButton("Cancel"))
+		{
+			resizeDialogOpen = false;
+		}
+		igSameLine();
+		if(igButton("Resize"))
+		{
+			resizeDialogOpen = false;
+			Map.resize(resizeDialogAddLeft, resizeDialogAddRight, resizeDialogAddTop, resizeDialogAddBottom, true);
+			///Map.create(cast(ubyte)newDialogW,cast(ubyte)newDialogH,newDialogType,cast(ubyte)newDialogHeight);
+		}
+		
+		igEndChild();
+		igEndGroup();
 
 		igEnd();
 	}
