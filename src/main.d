@@ -838,8 +838,8 @@ out vec4 fragColor;
 
 void main(void)
 {
-    //float alpha = texture2D(Texture, texCoord).r;
-    vec4 tc = texture2D(Texture, texCoord).rgba; //vec4(vertexColor.rgb, vertexColor.a * alpha);
+    //float alpha = texture(Texture, texCoord).r;
+    vec4 tc = texture(Texture, texCoord).rgba; //vec4(vertexColor.rgb, vertexColor.a * alpha);
 	fragColor = (tc*uColor).rgba;
     //fragColor = vec4(0.5,0.5,0.5, 1);
 }`;

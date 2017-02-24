@@ -74,7 +74,7 @@ void main()
 	}
 	else
 	{
-		diffuse = texture2D(tex,uv.xy).rgb;
+		diffuse = texture(tex,uv.xy).rgb;
 	}
 	
 	if(hidden)
