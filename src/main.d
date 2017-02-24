@@ -119,6 +119,29 @@ void debugLog(S...)(S ss)
 	std.stdio.writeln(logText);
 }
 
+/// GLFW error callback
+extern(C) nothrow void errorCB(int error, const(char)* description)
+{
+	import std.conv;
+	try debugLog("GLFW error: ", error, " (", to!string(description),")");
+	catch(Exception e)
+	{
+		
+	}
+}
+
+/// OpenGL debug context callback, only needed in debug mode
+debug extern(System) nothrow void glDebugCB(uint source, uint type, uint id, uint severity, int length, in char* message, void* userParam)
+{
+	import std.conv;
+	if(type == GL_DEBUG_TYPE_PERFORMANCE_ARB || type == GL_DEBUG_TYPE_OTHER_ARB) return;
+	try debugLog("GL debug callback: ", message[0..length]);
+	catch(Exception e)
+	{
+		
+	}
+}
+
 ImVec4 RGBA(ubyte r, ubyte g, ubyte b, ubyte a = 255)
 {
 	return ImVec4(r/255f, g/255f, b/255f, a/255f);
@@ -155,6 +178,8 @@ void main(string[] args)
 		throw new Exception("Failed to load Derelict libs");
 	}
 
+	glfwSetErrorCallback(&errorCB);
+
 	if( !glfwInit() )
 	{
 		debugLog("Failed to initialize GLFW3");
@@ -165,7 +190,7 @@ void main(string[] args)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, true);
+	debug glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 
 	window = glfwCreateWindow(width, height,"GeoTool",null,null);
 	
@@ -189,6 +214,12 @@ void main(string[] args)
 	
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(2);
+
+	debug
+	{
+		glDebugMessageCallbackARB(&glDebugCB, null);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+	}
 	
 	/// -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
