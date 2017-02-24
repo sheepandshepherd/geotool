@@ -205,9 +205,6 @@ void main(string[] args)
 
 
 
-	version(GLSL120) debugLog("Using GLSL version 120.");
-	version(GLSL130) debugLog("Using GLSL version 130.");
-
 	debugLog("Loaded base opengl. Version: "~ text(DerelictGL3.loadedVersion));
 	DerelictGL3.reload;
 	debugLog("Reloaded opengl. Version: "~ text(DerelictGL3.loadedVersion)~"\n");
@@ -287,12 +284,10 @@ void main(string[] args)
 	/// load icon from internal data
 	iconHandle = imageDataToGLTexture(IL_ICO,icon);
 
-	version(GLSL120) texturedRectShader = new Shader("texturedrect",texturedrectsource120);
-	version(GLSL130) texturedRectShader = new Shader("texturedrect",texturedrectsource130);
+	texturedRectShader = new Shader("texturedrect",texturedrectsource130);
 	texturedRectShaderIDs = [texturedRectShader.get_attrib_location("VertexPosition"), texturedRectShader.get_attrib_location("VertexTexCoord"), texturedRectShader.get_uniform_location("uColor"), texturedRectShader.get_uniform_location("Viewport"), texturedRectShader.get_uniform_location("Texture")];
 
-	version(GLSL120) terrainShader = new Shader(buildPath(path,"terrain120.glsl"));
-	version(GLSL130) terrainShader = new Shader(buildPath(path,"terrain130.glsl"));
+	terrainShader = new Shader(buildPath(path,"terrain130.glsl"));
 	terrainShader.bind;
 	float[(EnumMembers!Type).length*3] colors = 0.5f;
 	foreach(Type t, ImVec4 c; Tile.colors)
@@ -302,8 +297,7 @@ void main(string[] args)
 	}
 	terrainShader.uniform3fv("colors",colors);
 
-	version(GLSL120) colorShader = new Shader(buildPath(path,"color120.glsl"));
-	version(GLSL130) colorShader = new Shader(buildPath(path,"color130.glsl"));
+	colorShader = new Shader(buildPath(path,"color130.glsl"));
 
 	// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	// Required vertex array
@@ -822,34 +816,7 @@ ushort getScreenshotNumber()
 
 
 
-
-const string texturedrectsource120 = `#version 120
-
-vertex:
-uniform vec2 Viewport;
-attribute vec2 VertexPosition;
-attribute vec2 VertexTexCoord;
-varying vec2 texCoord;
-void main(void)
-{
-	texCoord = VertexTexCoord;
-	gl_Position = vec4(VertexPosition * 2.0 / Viewport - 1.0, 0.0, 1.0);
-}
-
-fragment:
-varying vec2 texCoord;
-uniform vec4 uColor;
-uniform sampler2D Texture;
-//out vec4  Color;
-void main(void)
-{
-    //float alpha = texture2D(Texture, texCoord).r;
-    vec4 tc = texture2D(Texture, texCoord).rgba; //vec4(vertexColor.rgb, vertexColor.a * alpha);
-	gl_FragColor = (tc*uColor).rgba;
-    //gl_FragColor = vec4(0.5,0.5,0.5, 1);
-}`;
-
-const string texturedrectsource130 = `#version 130
+static immutable string texturedrectsource130 = `#version 130
 
 vertex:
 uniform vec2 Viewport;
