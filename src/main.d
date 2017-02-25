@@ -284,10 +284,10 @@ void main(string[] args)
 	/// load icon from internal data
 	iconHandle = imageDataToGLTexture(IL_ICO,icon);
 
-	texturedRectShader = new Shader("texturedrect",texturedrectsource130);
+	texturedRectShader = new Shader("texturedrect",texturedRectSource);
 	texturedRectShaderIDs = [texturedRectShader.get_attrib_location("VertexPosition"), texturedRectShader.get_attrib_location("VertexTexCoord"), texturedRectShader.get_uniform_location("uColor"), texturedRectShader.get_uniform_location("Viewport"), texturedRectShader.get_uniform_location("Texture")];
 
-	terrainShader = new Shader(buildPath(path,"terrain130.glsl"));
+	terrainShader = new Shader(buildPath(path,"terrain.glsl"));
 	terrainShader.bind;
 	float[(EnumMembers!Type).length*3] colors = 0.5f;
 	foreach(Type t, ImVec4 c; Tile.colors)
@@ -297,7 +297,7 @@ void main(string[] args)
 	}
 	terrainShader.uniform3fv("colors",colors);
 
-	colorShader = new Shader(buildPath(path,"color130.glsl"));
+	colorShader = new Shader(buildPath(path,"color.glsl"));
 
 	// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	// Required vertex array
@@ -816,7 +816,7 @@ ushort getScreenshotNumber()
 
 
 
-static immutable string texturedrectsource130 = `#version 130
+static immutable string texturedRectSource = `#version 330
 
 vertex:
 uniform vec2 Viewport;
