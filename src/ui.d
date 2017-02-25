@@ -342,7 +342,7 @@ static:
 				openURL("http://www.rockraidersunited.com/topic/6249-geotool/"w);
 			}
 			igSameLine();
-			igText(versionString.ptr);
+			igText(versionString);
 			igSeparator();
 			igText("  Program controls:");
 			igText("Drag map(s) into window = load");

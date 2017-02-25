@@ -52,8 +52,8 @@ static immutable void[] icon = import("geotool.ico");
 uint iconHandle; /// OpenGL handle for the icon
 
 /// Globals
-debug string versionString = "Debug Beta 2\0";
-else string versionString = "Beta 2\0";
+debug static immutable char* versionString = "Debug v0.3.0";
+else static immutable char* versionString = "v0.3.0";
 string path;
 GLFWwindow* window;
 vec2d mouse = vec2d(0.0,0.0);
@@ -154,7 +154,7 @@ void main(string[] args)
 
 	// make the debug log
 	if(std.file.exists(path~"\\log.txt")) std.file.remove(path~"\\log.txt");
-	std.file.write(path~"\\log.txt","Geotool "~versionString~" log: "~std.datetime.Clock.currTime.toISOExtString);
+	std.file.write(path~"\\log.txt","Geotool "~versionString.fromStringz~" log: "~std.datetime.Clock.currTime.toISOExtString);
 
 	try{
 		DerelictGL3.load();
