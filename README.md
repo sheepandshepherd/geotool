@@ -10,11 +10,11 @@ Compiling
 
 License
 -------
-GPL v2.0 or later - <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>  
+MIT - <https://opensource.org/licenses/MIT>  
 
 Tools and libraries used
 ------------------------
-D Compiler: DMD v2.070.2 - <http://dlang.org/download.html#dmd>  
+D Compiler: DMD v2.072.1 - <http://dlang.org/download.html#dmd>  
 D Package Manager: DUB - <http://code.dlang.org/download>  
 Window context library: GLFW - <http://www.glfw.org/>  
 Image loading library: DevIL - <http://openil.sourceforge.net/>  

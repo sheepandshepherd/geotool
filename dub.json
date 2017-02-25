@@ -3,7 +3,7 @@
 	"description": "Map viewer/editor for Lego Rock Raiders",
 	"authors": ["sheepandshepherd"],
 	"homepage": "http://www.rockraidersunited.com/topic/6249-geotool/",
-	"license": "GPL-2.0 or later",
+	"license": "MIT",
 	"copyright": "Copyright © 2014-2017 sheepandshepherd",
 	"versions": ["gl3n","Derelict3"],
 	"targetPath": "bin",
