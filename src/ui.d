@@ -58,6 +58,9 @@ static:
 	uint g_VboHandle, g_VaoHandle, g_ElementsHandle;
 	ImGuiIO* io;
 
+	vec2i glfwWindowSize;
+	vec2i glfwFramebufferSize;
+
 
 	/++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 	UI variables
@@ -122,6 +125,7 @@ static:
 	// biome bar
 	bool showBiomeBar = true;
 	bool chooseBiome = true;
+	debug bool showDebugStats = true;
 	bool showAbout = false;
 
 	bool deletionConfirmation = false;
@@ -333,6 +337,33 @@ static:
 		igCheckbox("Overwrite on save",&Map.autoOverwrite);
 		
 		igSeparator();
+
+		debug
+		{
+			import derelict.glfw3;
+			showDebugStats = igCollapsingHeader("Debug Stats",null,true,true);
+			if(showDebugStats)
+			{
+				igText("ImGui size:");
+				auto imguiSize = io.DisplaySize;
+				igText("   %.0f, %.0f",imguiSize.x,imguiSize.y);
+				igText("GLFW size:");
+				igText("   %d, %d", glfwWindowSize.x, glfwWindowSize.y);
+				igText("GLFW framebuffer size:");
+				igText("   %d, %d", glfwFramebufferSize.x, glfwFramebufferSize.y);
+
+				igSpacing();
+
+				igText("ImGui mouse pos:");
+				auto imguiMouse = io.MousePos;
+				igText("   %.0f, %.0f",imguiMouse.x,imguiMouse.y);
+				igText("GLFW mouse pos:");
+				vec2d glfwMouse;
+				glfwGetCursorPos(window, &glfwMouse.vector[0], &glfwMouse.vector[1]);
+				igText("   %.0f, %.0f",glfwMouse.x, glfwMouse.y);
+
+			}
+		}
 
 		showAbout = igCollapsingHeader("About",null,true,true);
 		if(showAbout)
@@ -899,10 +930,8 @@ static:
 
 	static void render()
 	{
-		int w, h;
-		int display_w, display_h;
-		glfwGetWindowSize(g_window, &w, &h);
-		glfwGetFramebufferSize(g_window, &display_w, &display_h);
+		glfwGetWindowSize(g_window, &glfwWindowSize.vector[0], &glfwWindowSize.vector[1]);
+		glfwGetFramebufferSize(g_window, &glfwFramebufferSize.vector[0], &glfwFramebufferSize.vector[1]);
 
 		newFrame();
 
