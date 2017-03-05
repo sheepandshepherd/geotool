@@ -6,6 +6,8 @@ import derelict.devil.ilu, derelict.devil.ilut;
 import util.linalg;
 import gl3n.linalg;
 
+import std.stdio, std.conv;
+
 __gshared private uint _blankTexture = 0;
 @property @nogc nothrow
 uint blankTexture()

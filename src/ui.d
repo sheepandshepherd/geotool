@@ -28,9 +28,11 @@ import derelict.opengl3.gl3;
 import derelict.glfw3.glfw3;
 import util.linalg;
 
-import std.string : toStringz;
+import std.string;
 import std.meta;
-debug import std.stdio : writeln;
+import std.stdio, std.conv;
+import std.path;
+import std.math;
 
 import main: window, width, height, m, mb, showLoadMenu, savePathString, saveINI, pSurfM, pHighI, pHighM, debugLog, versionString, iconHandle, mouseScroll;
 import main : filePath = path;

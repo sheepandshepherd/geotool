@@ -23,7 +23,11 @@ SOFTWARE.
 
 module biome;
 import std.path, std.file;
-import derelict.devil.il;
+import std.string;
+import std.stdio, std.conv;
+
+
+import derelict.devil.il, derelict.devil.ilu;
 import util.linalg;
 
 import derelict.opengl3.gl3;

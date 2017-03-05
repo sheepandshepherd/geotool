@@ -31,8 +31,12 @@ import mesh, biome;
 
 import std.typecons : tuple, Tuple, EnumMembers;
 
-import std.algorithm.searching : canFind;
-import std.algorithm.comparison : clamp, min, max;
+import std.algorithm.searching;
+import std.algorithm.comparison;
+import std.string;
+import std.stdio, std.conv;
+import std.path;
+import std.math;
 
 
 import gl3n.plane;

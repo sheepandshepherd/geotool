@@ -32,7 +32,7 @@ version(Windows)
 
 
 	import core.sys.windows.windows;
-	import std.c.stdlib : malloc, free;
+	import core.stdc.stdlib : malloc, free;
 }
 import core.stdc.stdio : FILENAME_MAX;
 enum uint FILENAME_LENGTH = cast(uint)FILENAME_MAX;

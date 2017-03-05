@@ -39,6 +39,7 @@ import glamour.vao : VAO;
 import dialog;
 import std.algorithm.comparison : clamp, max, min;
 import std.algorithm.searching : canFind;
+import std.datetime : Clock;
 
 import std.process;
 
@@ -120,7 +121,7 @@ void debugLog(S...)(S ss)
 		logText~=text(s);
 	}
 	std.file.append(path~"\\log.txt","\n"~logText);
-	std.stdio.writeln(logText);
+	writeln(logText);
 }
 
 /// GLFW error callback
@@ -158,7 +159,7 @@ void main(string[] args)
 
 	// make the debug log
 	if(std.file.exists(path~"\\log.txt")) std.file.remove(path~"\\log.txt");
-	std.file.write(path~"\\log.txt","Geotool "~versionString.fromStringz~" log: "~std.datetime.Clock.currTime.toISOExtString);
+	std.file.write(path~"\\log.txt","Geotool "~versionString.fromStringz~" log: "~Clock.currTime.toISOExtString);
 
 	try{
 		DerelictGL3.load();
@@ -593,8 +594,8 @@ void main(string[] args)
 		// camera controls. if any are pressed during frame, reload the matrix.
 		const float shiftMult = 3f, rateAngle = 0.5f, rateRot = 0.25f, rateZoom = 25f, ratePan = 15f;
 		float shiftMod() @property { return (keyHold(GLFW_KEY_LEFT_SHIFT)||keyHold(GLFW_KEY_RIGHT_SHIFT))?shiftMult:1f; }
-		if(keyHold(GLFW_KEY_UP)){Map.cameraAngle = std.algorithm.min(1f,Map.cameraAngle+(shiftMod*deltaTime*rateAngle));matUpdate = true;}
-		else if(keyHold(GLFW_KEY_DOWN)){Map.cameraAngle = std.algorithm.max(0.1f,Map.cameraAngle-(shiftMod*deltaTime*rateAngle));matUpdate = true;}
+		if(keyHold(GLFW_KEY_UP)){Map.cameraAngle = min(1f,Map.cameraAngle+(shiftMod*deltaTime*rateAngle));matUpdate = true;}
+		else if(keyHold(GLFW_KEY_DOWN)){Map.cameraAngle = max(0.1f,Map.cameraAngle-(shiftMod*deltaTime*rateAngle));matUpdate = true;}
 
 		if(keyHold(GLFW_KEY_RIGHT)){ Map.cameraRot = Map.normalize(Map.cameraRot+(shiftMod*deltaTime*rateRot),1f);matUpdate = true; }
 		else if(keyHold(GLFW_KEY_LEFT)){ Map.cameraRot = Map.normalize(Map.cameraRot-(shiftMod*deltaTime*rateRot),1f);matUpdate = true; }
@@ -614,13 +615,13 @@ void main(string[] args)
 		}
 
 
-		if(keyHold(GLFW_KEY_KP_ADD)||keyHold(GLFW_KEY_PAGEUP)){ Map.cameraZoom = std.algorithm.max(1.5f,Map.cameraZoom-(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
-		else if(keyHold(GLFW_KEY_KP_SUBTRACT)||keyHold(GLFW_KEY_PAGEDOWN)){ Map.cameraZoom = std.algorithm.min(25f,Map.cameraZoom+(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
+		if(keyHold(GLFW_KEY_KP_ADD)||keyHold(GLFW_KEY_PAGEUP)){ Map.cameraZoom = max(1.5f,Map.cameraZoom-(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
+		else if(keyHold(GLFW_KEY_KP_SUBTRACT)||keyHold(GLFW_KEY_PAGEDOWN)){ Map.cameraZoom = min(25f,Map.cameraZoom+(shiftMod*deltaTime*rateZoom)); matUpdate = true; }
 
 		/// scroll with mousewheel:
 		if(!mouseInUI && (mouseScroll < -float.epsilon || mouseScroll > float.epsilon))
 		{
-			Map.cameraZoom = std.algorithm.clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f);
+			Map.cameraZoom = clamp(Map.cameraZoom+(mouseScroll*shiftMod*deltaTime*rateZoom),1.5f,25f);
 			matUpdate = true;
 		}
 
