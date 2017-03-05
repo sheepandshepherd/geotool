@@ -1391,6 +1391,8 @@ THE SOFTWARE.`;
 		glfwGetWindowSize(g_window, &w, &h);
 		glfwGetFramebufferSize(g_window, &display_w, &display_h);
 		io.DisplaySize = ImVec2(cast(float)display_w, cast(float)display_h);
+		io.DisplayFramebufferScale = ImVec2(w > 0 ? (display_w / cast(float)w) : 0f,
+		                                    h > 0 ? (display_h / cast(float)h) : 0f);
 		
 		// Setup time step
 		double current_time =  glfwGetTime();
