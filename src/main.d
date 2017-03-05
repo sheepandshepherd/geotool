@@ -379,7 +379,7 @@ void main(string[] args)
 		{
 			debugLog("Resizing window to ",_width,"x",_height);
 		}
-		catch{}
+		catch(Exception e){}
 		width = _width;
 		height = _height;
 
