@@ -1127,12 +1127,13 @@ THE SOFTWARE.`;
 		
 		auto io = igGetIO();
 		// Setup orthographic projection matrix
-		const float width = io.DisplaySize.x;
-		const float height = io.DisplaySize.y;
+		immutable vec2 displaySize = vec2(io.DisplaySize.x, io.DisplaySize.y);
+		immutable vec2 framebufferSize = vec2(displaySize.x * io.DisplayFramebufferScale.x,
+		                                      displaySize.y * io.DisplayFramebufferScale.y);
 		const float[4][4] ortho_projection =
 		[
-			[ 2.0f/width,	0.0f,			0.0f,		0.0f ],
-			[ 0.0f,			2.0f/-height,	0.0f,		0.0f ],
+			[ 2.0f/displaySize.x,	0.0f,			0.0f,		0.0f ],
+			[ 0.0f,			2.0f/-displaySize.y,	0.0f,		0.0f ],
 			[ 0.0f,			0.0f,			-1.0f,		0.0f ],
 			[ -1.0f,		1.0f,			0.0f,		1.0f ],
 		];
@@ -1168,7 +1169,7 @@ THE SOFTWARE.`;
 				else
 				{
 					glBindTexture(GL_TEXTURE_2D, cast(GLuint)pcmd.TextureId);
-					glScissor(cast(int)pcmd.ClipRect.x, cast(int)(height - pcmd.ClipRect.w), cast(int)(pcmd.ClipRect.z - pcmd.ClipRect.x), cast(int)(pcmd.ClipRect.w - pcmd.ClipRect.y));
+					glScissor(cast(int)pcmd.ClipRect.x, cast(int)(framebufferSize.y - pcmd.ClipRect.w), cast(int)(pcmd.ClipRect.z - pcmd.ClipRect.x), cast(int)(pcmd.ClipRect.w - pcmd.ClipRect.y));
 					glDrawElements(GL_TRIANGLES, pcmd.ElemCount, GL_UNSIGNED_SHORT, idx_buffer_offset);
 				}
 				
@@ -1390,7 +1391,7 @@ THE SOFTWARE.`;
 		int display_w, display_h;
 		glfwGetWindowSize(g_window, &w, &h);
 		glfwGetFramebufferSize(g_window, &display_w, &display_h);
-		io.DisplaySize = ImVec2(cast(float)display_w, cast(float)display_h);
+		io.DisplaySize = ImVec2(cast(float)w, cast(float)h);
 		io.DisplayFramebufferScale = ImVec2(w > 0 ? (display_w / cast(float)w) : 0f,
 		                                    h > 0 ? (display_h / cast(float)h) : 0f);
 		
@@ -1405,8 +1406,6 @@ THE SOFTWARE.`;
 		{
 			double mouse_x, mouse_y;
 			glfwGetCursorPos(g_window, &mouse_x, &mouse_y);
-			mouse_x *= cast(float)display_w / w;						// Convert mouse coordinates to pixels
-			mouse_y *= cast(float)display_h / h;
 			io.MousePos = ImVec2(mouse_x, mouse_y);   // Mouse position, in pixels (set to -1,-1 if no mouse / on another screen, etc.)
 		}
 		else
